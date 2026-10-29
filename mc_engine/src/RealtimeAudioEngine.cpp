@@ -50,7 +50,7 @@ struct RealtimeAudioEngine::Impl {
     std::unique_ptr<PieceMixer> mixer;
 
     std::vector<std::string> trackPaths;
-    std::size_t firstOutput = 0;
+    std::vector<int> outputChannels;
 
     std::atomic<bool> wantActive{false};  // user wants audio advancing (playing or resuming)
     std::atomic<bool> fadeTarget{false};  // transportGain ramps towards this (pause/resume)
@@ -178,12 +178,16 @@ RealtimeAudioEngine::~RealtimeAudioEngine() {
 bool RealtimeAudioEngine::loadPiece(std::uint32_t deviceId,
                                    const std::vector<std::string>& trackPaths,
                                    std::size_t numOutputs,
-                                   std::size_t firstOutput,
+                                   const std::vector<int>& outputChannels,
                                    double startSeconds) {
     unload();
 
     if (trackPaths.empty() || numOutputs == 0) {
         lastError_ = "No tracks or no outputs given.";
+        return false;
+    }
+    if (!outputChannels.empty() && outputChannels.size() != trackPaths.size()) {
+        lastError_ = "outputChannels size must match trackPaths size.";
         return false;
     }
 
@@ -216,7 +220,14 @@ bool RealtimeAudioEngine::loadPiece(std::uint32_t deviceId,
     }
 
     auto mixer = std::make_unique<PieceMixer>(voices.size(), numOutputs, sampleRate, kBufferFrames * 4);
-    mixer->setGainMatrix(GainMatrix::identityDirect(voices.size(), numOutputs, firstOutput));
+    GainMatrix matrix(voices.size(), numOutputs);
+    for (std::size_t i = 0; i < voices.size(); ++i) {
+        const int out = outputChannels.empty() ? static_cast<int>(i) : outputChannels[i];
+        if (out >= 0 && static_cast<std::size_t>(out) < numOutputs) {
+            matrix.setGain(i, static_cast<std::size_t>(out), 1.0f);
+        }
+    }
+    mixer->setGainMatrix(matrix);
 
     std::vector<SampleSource*> sourcePtrs;
     sourcePtrs.reserve(voices.size());
@@ -228,7 +239,10 @@ bool RealtimeAudioEngine::loadPiece(std::uint32_t deviceId,
     impl_->sourcePtrs = std::move(sourcePtrs);
     impl_->mixer = std::move(mixer);
     impl_->trackPaths = trackPaths;
-    impl_->firstOutput = firstOutput;
+    impl_->outputChannels.resize(trackPaths.size());
+    for (std::size_t i = 0; i < trackPaths.size(); ++i) {
+        impl_->outputChannels[i] = outputChannels.empty() ? static_cast<int>(i) : outputChannels[i];
+    }
     impl_->framesPlayed.store(static_cast<std::uint64_t>(startSeconds * sampleRate), std::memory_order_relaxed);
     impl_->stopRequested.store(false, std::memory_order_relaxed);
     impl_->stoppedFlag.store(false, std::memory_order_relaxed);
@@ -298,11 +312,11 @@ void RealtimeAudioEngine::seek(double seconds) {
     }
     const bool wasActive = impl_->wantActive.load(std::memory_order_acquire);
     const auto paths = impl_->trackPaths;
-    const auto firstOutput = impl_->firstOutput;
+    const auto outputChannels = impl_->outputChannels;
     const auto numOutputs = impl_->numOutputs;
     const auto deviceId = impl_->deviceId;
 
-    if (!loadPiece(deviceId, paths, numOutputs, firstOutput, std::max(0.0, seconds))) {
+    if (!loadPiece(deviceId, paths, numOutputs, outputChannels, std::max(0.0, seconds))) {
         return;
     }
     if (wasActive) {
@@ -353,6 +367,21 @@ void RealtimeAudioEngine::setTrackSolo(std::size_t track, bool solo) {
     if (impl_->mixer) {
         impl_->mixer->setTrackSolo(track, solo);
     }
+}
+
+void RealtimeAudioEngine::setTrackOutputChannel(std::size_t track, int outputChannel) {
+    if (!impl_->mixer || track >= impl_->outputChannels.size()) {
+        return;
+    }
+    impl_->outputChannels[track] = outputChannel;
+    GainMatrix matrix(impl_->outputChannels.size(), impl_->numOutputs);
+    for (std::size_t i = 0; i < impl_->outputChannels.size(); ++i) {
+        const int out = impl_->outputChannels[i];
+        if (out >= 0 && static_cast<std::size_t>(out) < impl_->numOutputs) {
+            matrix.setGain(i, static_cast<std::size_t>(out), 1.0f);
+        }
+    }
+    impl_->mixer->setGainMatrix(matrix);
 }
 
 void RealtimeAudioEngine::setMasterGainDb(float db) {

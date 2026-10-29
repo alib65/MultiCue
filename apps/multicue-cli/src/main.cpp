@@ -53,7 +53,7 @@ int playCommand(int argc, char** argv) {
     }
 
     mc::engine::RealtimeAudioEngine engine;
-    if (!engine.loadPiece(deviceId, tracks, tracks.size(), 0, startAt)) {
+    if (!engine.loadPiece(deviceId, tracks, tracks.size(), {}, startAt)) {
         std::fprintf(stderr, "Load failed: %s\n", engine.lastError().c_str());
         return 1;
     }

@@ -30,10 +30,12 @@ public:
     // Opens the device stream (if not already open for this device) and
     // loads+prefills one voice per track. Tears down any previously loaded
     // piece first. Returns false and sets lastError() on failure.
+    // `outputChannels` gives each track's direct-mode output (0-based); pass
+    // an empty vector for the common case of track i -> output i.
     bool loadPiece(std::uint32_t deviceId,
                    const std::vector<std::string>& trackPaths,
                    std::size_t numOutputs,
-                   std::size_t firstOutput,
+                   const std::vector<int>& outputChannels = {},
                    double startSeconds = 0.0);
 
     void unload();
@@ -61,6 +63,10 @@ public:
     void setTrackGainDb(std::size_t track, float db);
     void setTrackMuted(std::size_t track, bool muted);
     void setTrackSolo(std::size_t track, bool solo);
+    // Live routing change: re-point one track at a different output. Safe
+    // while playing (see PieceMixer::setGainMatrix); a hard cut, not faded,
+    // matching the reference's own un-faded direct-mode "-> out N" menu.
+    void setTrackOutputChannel(std::size_t track, int outputChannel);
     void setMasterGainDb(float db);
     void setCeilingDb(float db);
     void setLimiterEnabled(bool enabled);
