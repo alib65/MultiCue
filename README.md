@@ -9,25 +9,36 @@ synchronized video. "MultiCue" is a working name.
 
 It is free software, licensed GPL-3.0-or-later.
 
-The project is pre-alpha: milestone **M0 (skeleton)** is in progress. See
-`docs/ROADMAP.md` for what exists today versus what is still open, and
-`docs/ARCHITECTURE.md` for the design.
+The project is pre-alpha: milestones **M0 (skeleton)** and **M1 (engine
+core)** are substantially complete on macOS (see `docs/ROADMAP.md` for the
+exact checklist, including what is *not* yet verified -- notably Windows and
+Linux, which have not run at all in this environment). `docs/ARCHITECTURE.md`
+has the design.
 
 ## Status right now
 
 - `mc_core`: application identity constants (`AppInfo.h`), a `versionString()`
   helper. The show-file data model arrives in M2.
-- `mc_engine`: audio output device enumeration (RtAudio) and a single-channel
-  test-tone generator, following the real-time audio-thread rules from
-  `docs/ARCHITECTURE.md` from day one (no allocation/locks/I/O in the audio
-  callback). Disk streaming, the cue runtime and the gain-matrix router
-  arrive in M1.
-- `multicue`: a Qt 6 Widgets window to pick a device/channel and play the
-  test tone.
-- `multicue-cli`: `list-devices` and `version` subcommands.
+- `mc_engine`: device enumeration; disk streaming (`Voice`, lock-free
+  `RingBuffer`, on-the-fly resampling that is bypassed entirely when rates
+  match, so direct mode is bit-exact); a direct-mode routing matrix
+  (`GainMatrix`); click-free fades (`Envelope`) for start/stop and for
+  pause/resume/seek; a lookahead master limiter (`MasterLimiter`, sample-peak
+  for now -- true peak arrives at M4, see `docs/ROADMAP.md`); the shared
+  mixing core used by both the realtime engine and the offline renderer
+  (`PieceMixer`); and `RealtimeAudioEngine` (live load/play/pause/stop/seek
+  against a real audio device, with device-loss detection). The cue runtime
+  and spatial/listening-format math arrive in M3/M5.
+- `multicue`: a Qt 6 Widgets window, dark by default, to pick a device/
+  channel and play a test tone (M0's slice; M2 adds the real playlist mixer
+  wired to `RealtimeAudioEngine`).
+- `multicue-cli`: `list-devices`, `version`, `render` (direct-mode offline
+  mix to a WAV file), `play` (live playback for manual testing, including a
+  built-in pause/resume/seek sequence).
 
-Nothing beyond this is implemented yet; `docs/ROADMAP.md` tracks every open
-item explicitly rather than presenting stubs as finished features.
+`docs/ROADMAP.md` tracks every open item explicitly, including things that
+look done but are only manually/locally verified rather than proven in CI --
+nothing here is presented as more finished than it is.
 
 ## Building
 
@@ -72,6 +83,8 @@ Windows/Linux legs as written-but-unverified until the first real CI run.
 
 ```sh
 ./build/apps/multicue-cli/multicue-cli list-devices
+./build/apps/multicue-cli/multicue-cli render out.wav track1.wav track2.wav --gain -3
+./build/apps/multicue-cli/multicue-cli play <device_id> track1.wav track2.wav --seconds 5
 ./build/apps/multicue/multicue
 ```
 

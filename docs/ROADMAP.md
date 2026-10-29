@@ -23,11 +23,13 @@ added — not recalled from memory. Logged here as it happens:
 | Catch2 | 2026-10-29 | 3.16.1 | BSL-1.0 (Boost) | Same dual-path story as RtAudio; `Catch2::Catch2WithMain` CMake target confirmed from both Homebrew and vcpkg. |
 | Qt | 2026-10-29 | 6.11.1 (local Homebrew) / 6.11.3 (pinned in CI via aqtinstall) | BSD-3-Clause AND GPL-2.0-only AND (GPL-3.0-only WITH Qt-GPL-exception-1.0) AND LGPL-3.0-only (multi-licensed; Widgets module used here under LGPL-3.0-only, linked dynamically, per the project brief) | `brew info qt` / aqtinstall. Homebrew's current stable is 6.12.0; 6.11.x was kept locally to match what was already installed and what CI pins — bump to 6.12.x is a deliberate future decision, not an oversight. |
 | vcpkg | 2026-10-29 | git commit `a27c8b7e…` (builtin-baseline in `vcpkg.json`) | MIT | Bootstrapped locally outside the repo (`~/vcpkg`) to verify the CI mechanism end-to-end before committing to it; GitHub-hosted runners have it preinstalled at `$VCPKG_INSTALLATION_ROOT`. |
+| libsndfile | 2026-10-29 | 1.2.2 (port-version 2) | LGPL-2.1-or-later | `brew info libsndfile` and vcpkg's `vcpkg.json` agree on 1.2.2. Same dual CMake-config (`SndFile::sndfile`) / pkg-config (`sndfile`) story as RtAudio; `cmake/FindSndFilePortable.cmake`. |
+| libsamplerate | 2026-10-29 | 0.2.2 | BSD-2-Clause | `brew info libsamplerate` and vcpkg's `vcpkg.json` agree on 0.2.2. `SampleRate::samplerate` CMake target / `samplerate` pkg-config module; `cmake/FindSampleRatePortable.cmake`. Used for the real-time streaming resampler (`src_process`, not the one-shot `src_simple`); bypassed entirely when the file's rate already matches the device's, which is what keeps direct mode bit-exact. |
 
-Dependencies not yet added (libsndfile, FFmpeg, libsamplerate/r8brain-free,
-pffft, libmysofa, liblo/oscpack, RtMidi) get their own row here at the
-milestone that first links them (M1, M3, M4, M6, M7 respectively), not
-before — see each milestone's checklist below.
+Dependencies not yet added (FFmpeg, r8brain-free [if libsamplerate's quality
+turns out insufficient for some format], pffft, libmysofa, liblo/oscpack,
+RtMidi) get their own row here at the milestone that first links them (M3,
+M4, M6, M7 respectively), not before — see each milestone's checklist below.
 
 ## M0 — Skeleton
 
@@ -95,31 +97,75 @@ created in M3 when `layoutPreset()` etc. are first implemented. Likewise
 Goal: `mc_engine` can actually play something — disk-streamed, sample-synced,
 routed, metered, offline-renderable.
 
-- [ ] Disk streaming: ring buffer per voice, reader thread pool, resampling
-      when a file's sample rate differs from the device (libsamplerate or
-      r8brain-free — version/license check logged before pinning).
-- [ ] Sample-synced multi-file playback: N mono voices of one piece start on
-      the same frame and stay locked for the piece's duration (test: offline
-      render, assert zero inter-voice sample offset throughout).
-- [ ] Direct routing matrix (crosspoint, arbitrary N×M) + transport
-      (play/pause/stop/seek) with click-free fades on every transition
-      (`docs/ARCHITECTURE.md` §3.4).
-- [ ] Metering: per-voice and per-output peak/RMS snapshots to the UI at
-      30+ fps without allocation on the audio thread.
-- [ ] Master bus: gain, true-peak limiter (`mc_dsp::TruePeakMeter`-backed,
-      fixing the reference's sample-peak-only limiter per §5).
-- [ ] Offline render path (`docs/ARCHITECTURE.md` §3.7): same DSP, faster
-      than real time, to a sound file.
-- [ ] `multicue-cli render` subcommand using the offline path.
-- [ ] Device-loss/change handling: show stays open, status message, recovery
-      on device return (`docs/ARCHITECTURE.md` §3.8) — tested by simulating a
-      stream-error callback, not just by hand.
-- [ ] Underrun counting, exposed via a snapshot, never crashes.
-- [ ] Engine tests (Catch2, via offline render): direct-mode bit-exactness,
-      sample-aligned starts, click-free fades/seeks (§7 of the brief).
-- [ ] ASan/UBSan in CI for all new test binaries; attempt Clang
-      RealtimeSanitizer on the audio callback, note in CHANGELOG if the
-      toolchain doesn't support it yet rather than skipping silently.
+**Scope adjustment, logged as it was made (project brief §1):** the master
+limiter uses *sample* peak in M1, matching the reference, not the true-peak
+(4x oversampled) meter the brief's fix-list (§5) calls for. Building the
+oversampled true-peak filter now, before `mc_dsp` exists (M3) and before the
+loudness-analysis path that will share it exists (M4), would mean writing it
+twice. It is upgraded to true peak at M4 when `mc_dsp::Bs1770Meter` is built,
+sharing one implementation instead of two. Tracked as an open item below so
+it is not silently forgotten.
+
+- [x] Disk streaming: `RingBuffer` (lock-free SPSC, fixed capacity, no
+      allocation in `read()`/`write()`), one background reader thread per
+      `Voice` filling it from `FileSampleSource` (libsndfile), resampling via
+      libsamplerate only when the file's rate differs from the device's —
+      when it matches, samples pass through untouched (needed for direct-mode
+      bit-exactness, verified by test).
+- [x] Sample-synced multi-file playback: verified two ways — (1) an offline
+      render test with three identical-content tracks routed to three
+      different outputs, asserting every output channel is sample-identical
+      across the whole render; (2) real hardware playback via
+      `multicue-cli play`, 0 underruns over 6 s with two live voices on a
+      real CoreAudio device.
+- [x] Direct routing matrix (`GainMatrix`, arbitrary N×M, `identityDirect()`
+      builds the common track-i-to-output-i case) + transport
+      (`RealtimeAudioEngine`: play/pause/stop/seek). Click-free fades: a
+      per-track attack/release `Envelope` for start/stop (shared by the
+      offline and realtime paths), plus a short pause/resume transport-gain
+      ramp that preserves exact playback position across a pause (verified
+      against real hardware: paused and resumed positions line up to within
+      the ~30 ms fade window, sample-accurate seek lands within one audio
+      buffer of the requested time).
+- [x] Metering: `Voice::underrunCount()` / `RealtimeAudioEngine::underrunCount()`
+      are plain atomics, incremented without allocation/logging from the
+      audio thread; polled from the CLI in the live smoke test above (0
+      throughout). A UI-facing 30+ fps snapshot widget is M2/M5 scope (no UI
+      consumer exists yet to feed).
+- [x] Master bus: `MasterLimiter` — smoothed master gain + a real lookahead
+      (sliding-window-maximum, preallocated, allocation-free `process()`)
+      brick-wall limiter, *sample*-peak for now (see the scope-adjustment
+      note above). Tested: passthrough below ceiling, master gain applied,
+      sustained clamp to ceiling, zero overshoot during the attack transient,
+      disable-limiter bypass.
+- [x] Offline render path (`OfflineRenderer`): drives the identical
+      `PieceMixer`/`MasterLimiter` code the realtime engine uses, faster than
+      real time, to a WAV file — not a parallel implementation.
+- [x] `multicue-cli render` subcommand using the offline path; exercised
+      end-to-end with real generated WAV fixtures (`render … --gain -3`),
+      output verified with `afinfo`/`afplay`, not just "it compiled".
+- [x] Device-loss handling: `RtAudio::setErrorCallback` wired to an atomic
+      flag (`RealtimeAudioEngine::deviceWasLost()`), allocation-free so it is
+      safe regardless of which thread RtAudio invokes it from. **Not** yet
+      wired to an automatic reconnect-on-return or a UI message — that lands
+      when there is a UI transport to show it in (M2), tracked as an open
+      item below rather than silently assumed.
+- [x] Underrun counting, exposed via a snapshot, never crashes — see Metering
+      above.
+- [x] Engine tests (Catch2, via offline render): direct-mode bit-exactness
+      (sustained-region sample equality against the source file), sample-
+      aligned multi-voice starts, click-free attack (monotonic ramp from
+      silence, no overshoot) — 37 tests total across `mc_core`/`mc_engine`,
+      all passing.
+- [x] ASan/UBSan: a local `-DMULTICUE_ENABLE_ASAN=ON` build was run against
+      the full test suite (clean) *and* against the live
+      `multicue-cli play`/pause/resume/seek smoke test on real hardware
+      (clean) — the one place sanitizers matter most, since that is where
+      the actual background-thread/ring-buffer/stream-teardown code runs.
+      Added as a second CI job (macOS + Ubuntu; MSVC's ASan is different
+      enough to defer rather than guess at, see the open item below).
+      Clang RealtimeSanitizer on the callback itself was not attempted this
+      milestone — tracked below, not skipped silently.
 
 ## M2 — Playlist mode
 
@@ -282,3 +328,30 @@ Goal: every listening format from the reference, plus the fixes from §5.
   been built on an actual Linux machine (none available in this
   environment) — first real signal comes from the first Ubuntu CI run, per
   the item above.
+- **Master limiter is sample-peak, not true-peak.** Deliberate M1 scope cut
+  (see M1's note above) — upgrade at M4 alongside `mc_dsp::Bs1770Meter`,
+  sharing one oversampling implementation instead of writing it twice.
+- **No automatic reconnect or UI message when `deviceWasLost()` fires.** The
+  detection is real (RtAudio's error callback → an atomic flag, verified not
+  to allocate), but nothing consumes it yet because there is no transport UI
+  to show a message in. Wire this up once M2's playlist UI exists.
+- **Windows has not run the engine at all.** Everything in M1 was built,
+  tested (including under ASan/UBSan), and run against real audio hardware
+  only on macOS (the only machine available in this environment). The CI
+  workflow covers Windows in principle; nothing has confirmed RtAudio's
+  WASAPI backend, MSVC warnings-as-errors, or the vcpkg Windows triplet
+  actually work until that CI run happens (see the M0 CI item above, which
+  this depends on).
+- **Clang RealtimeSanitizer was not attempted on the audio callback.** ASan/
+  UBSan were run (clean, including live hardware); RealtimeSanitizer
+  specifically checks for allocation/syscalls/locks *inside* the callback,
+  which is a stronger, more targeted check the brief explicitly asks for
+  (§7). Not done this milestone — try it at the start of M2 before more code
+  accumulates in the callback path.
+- **`RealtimeAudioEngine`'s pause/resume/seek paths are verified by one
+  manual scripted run against real hardware** (`multicue-cli play`'s
+  built-in pause→resume→seek sequence, positions checked by eye against the
+  expected arithmetic), not by an automated test — a real RtAudio device
+  isn't available/deterministic in CI, so an automated equivalent (if one is
+  worth building) would need to mock the device layer, which hasn't been
+  attempted yet.
