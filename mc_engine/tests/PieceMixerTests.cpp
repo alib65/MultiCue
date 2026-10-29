@@ -133,6 +133,31 @@ TEST_CASE("Solo isolates the soloed track", "[engine][piecemixer]") {
     REQUIRE(out[(4000 * 2) + 1] == Catch::Approx(1.0f).margin(1e-3));
 }
 
+TEST_CASE("setGainMatrix takes effect on the next processBlock call (live routing change)", "[engine][piecemixer]") {
+    constexpr double sr = 48000.0;
+    PieceMixer mixer(1, 2, sr, 4096);
+    mixer.masterLimiter().setEnabled(false);
+    mixer.start();
+
+    ConstantSource a(1.0f);
+    std::vector<SampleSource*> tracks{&a};
+    std::vector<float> out(4096 * 2);
+    for (int i = 0; i < 3; ++i) {
+        mixer.processBlock(tracks, out.data(), 4096);
+    }
+    // Default identity routing: track 0 -> output 0.
+    REQUIRE(out[(4000 * 2) + 0] == Catch::Approx(1.0f).margin(1e-3));
+    REQUIRE(out[(4000 * 2) + 1] == Catch::Approx(0.0f).margin(1e-4));
+
+    GainMatrix swapped(1, 2);
+    swapped.setGain(0, 1, 1.0f); // route track 0 -> output 1 instead
+    mixer.setGainMatrix(swapped);
+    mixer.processBlock(tracks, out.data(), 4096);
+
+    REQUIRE(out[(100 * 2) + 0] == Catch::Approx(0.0f).margin(1e-4));
+    REQUIRE(out[(100 * 2) + 1] == Catch::Approx(1.0f).margin(1e-3));
+}
+
 TEST_CASE("isSilent reports true only after stop() and the release tail finishes", "[engine][piecemixer]") {
     constexpr double sr = 48000.0;
     PieceMixer mixer(1, 1, sr, 4096);

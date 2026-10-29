@@ -10,12 +10,13 @@ PieceMixer::PieceMixer(std::size_t numTracks, std::size_t numOutputs, double sam
       numOutputs_(numOutputs),
       sampleRate_(sampleRate),
       maxBlockFrames_(maxBlockFrames),
-      matrix_(GainMatrix::identityDirect(numTracks, numOutputs)),
+      matrixCells_(numTracks * numOutputs),
       targetGainLinear_(numTracks, 1.0f),
       currentGainLinear_(numTracks, 1.0f),
       muted_(numTracks, false),
       solo_(numTracks, false),
       masterLimiter_(sampleRate, numOutputs, 5.0) {
+    setGainMatrix(GainMatrix::identityDirect(numTracks, numOutputs));
     envelopes_.reserve(numTracks);
     for (std::size_t i = 0; i < numTracks; ++i) {
         envelopes_.emplace_back(sampleRate);
@@ -23,8 +24,12 @@ PieceMixer::PieceMixer(std::size_t numTracks, std::size_t numOutputs, double sam
     trackScratch_.assign(numTracks, std::vector<float>(maxBlockFrames, 0.0f));
 }
 
-void PieceMixer::setGainMatrix(GainMatrix matrix) {
-    matrix_ = std::move(matrix);
+void PieceMixer::setGainMatrix(const GainMatrix& matrix) {
+    for (std::size_t t = 0; t < numTracks_; ++t) {
+        for (std::size_t o = 0; o < numOutputs_; ++o) {
+            matrixCells_[(t * numOutputs_) + o].store(matrix.gain(t, o), std::memory_order_release);
+        }
+    }
 }
 
 void PieceMixer::setTrackGainDb(std::size_t track, float db) {
@@ -91,7 +96,7 @@ std::size_t PieceMixer::processBlock(const std::vector<SampleSource*>& tracks, f
                 continue;
             }
             for (std::size_t o = 0; o < numOutputs_; ++o) {
-                const float g = matrix_.gain(t, o);
+                const float g = matrixCells_[(t * numOutputs_) + o].load(std::memory_order_acquire);
                 if (g != 0.0f) {
                     outInterleaved[(frame * numOutputs_) + o] += amp * g;
                 }

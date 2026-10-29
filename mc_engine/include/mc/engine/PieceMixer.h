@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <vector>
 
@@ -26,7 +27,19 @@ class PieceMixer {
 public:
     PieceMixer(std::size_t numTracks, std::size_t numOutputs, double sampleRate, std::size_t maxBlockFrames);
 
-    void setGainMatrix(GainMatrix matrix);
+    // Publishes each cell of `matrix` into its own std::atomic<float> slot
+    // (preallocated at construction, one per source×output cell -- the
+    // track/output counts are fixed for a PieceMixer's lifetime). Safe to
+    // call from the UI thread while the audio thread concurrently reads
+    // cells inside processBlock(): std::atomic<float> is genuinely
+    // lock-free on every platform this targets (unlike
+    // std::atomic<std::shared_ptr<T>>, which Apple's libc++ does not even
+    // support as of this writing -- checked empirically, not assumed).
+    // Direct-mode output reassignment is a hard cut, matching the
+    // reference's own un-faded "-> out N" menu; live-switchable *listening
+    // formats* get real cell-to-cell smoothing when they exist (M3),
+    // per docs/ARCHITECTURE.md §3.3.
+    void setGainMatrix(const GainMatrix& matrix);
     void setTrackGainDb(std::size_t track, float db);
     void setTrackMuted(std::size_t track, bool muted);
     void setTrackSolo(std::size_t track, bool solo);
@@ -56,7 +69,7 @@ private:
     double sampleRate_;
     std::size_t maxBlockFrames_;
 
-    GainMatrix matrix_;
+    std::vector<std::atomic<float>> matrixCells_; // row-major source*numOutputs_+output, see setGainMatrix()
     std::vector<float> targetGainLinear_;
     std::vector<float> currentGainLinear_;
     std::vector<bool> muted_;
@@ -65,8 +78,6 @@ private:
     std::vector<std::vector<float>> trackScratch_;
 
     MasterLimiter masterLimiter_;
-
-    void recomputeAudibility();
 };
 
 } // namespace mc::engine
