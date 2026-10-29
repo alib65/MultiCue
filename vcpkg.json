@@ -12,6 +12,8 @@
       "name": "rtaudio",
       "platform": "!linux"
     },
-    "catch2"
+    "catch2",
+    "libsndfile",
+    "libsamplerate"
   ]
 }
