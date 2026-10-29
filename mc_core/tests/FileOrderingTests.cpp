@@ -48,3 +48,21 @@ TEST_CASE("expandTracksFromProbedFiles honours a non-zero start output channel",
     const auto tracks = expandTracksFromProbedFiles(files, 5);
     REQUIRE(tracks[0].outputChannel == 5);
 }
+
+TEST_CASE("guessPieceTitle finds the common prefix across files", "[core][fileordering]") {
+    std::vector<std::string> paths = {"/music/Ambient Piece_1.wav", "/music/Ambient Piece_2.wav"};
+    REQUIRE(guessPieceTitle(paths) == "Ambient Piece");
+}
+
+TEST_CASE("guessPieceTitle falls back to the single filename for one file", "[core][fileordering]") {
+    REQUIRE(guessPieceTitle({"/music/Solo.wav"}) == "Solo");
+}
+
+TEST_CASE("guessPieceTitle falls back to the folder name when there is no usable common prefix", "[core][fileordering]") {
+    std::vector<std::string> paths = {"/music/MyPiece/1.wav", "/music/MyPiece/2.wav"};
+    REQUIRE(guessPieceTitle(paths) == "MyPiece");
+}
+
+TEST_CASE("guessPieceTitle on an empty list returns a placeholder, not a crash", "[core][fileordering]") {
+    REQUIRE(guessPieceTitle({}) == "Untitled");
+}

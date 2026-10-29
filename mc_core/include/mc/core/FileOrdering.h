@@ -31,4 +31,10 @@ struct ProbedFile {
 // desired track order (as it is when adding files from a file dialog).
 std::vector<Track> expandTracksFromProbedFiles(const std::vector<ProbedFile>& files, int startOutputChannel = 0);
 
+// Guesses a piece title from its file paths: the longest common filename
+// prefix (trimming trailing separators like "_"/"-"/"."/" "), falling back
+// to the containing folder's name -- ported from the reference's
+// `guessTitle`.
+std::string guessPieceTitle(const std::vector<std::string>& paths);
+
 } // namespace mc::core

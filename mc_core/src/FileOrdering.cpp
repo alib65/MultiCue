@@ -1,6 +1,7 @@
 #include "mc/core/FileOrdering.h"
 
 #include <cctype>
+#include <filesystem>
 
 namespace mc::core {
 
@@ -30,6 +31,35 @@ std::string naturalSortKey(const std::string& filename) {
     }
     flushDigits();
     return out;
+}
+
+std::string guessPieceTitle(const std::vector<std::string>& paths) {
+    if (paths.empty()) {
+        return "Untitled";
+    }
+    std::vector<std::string> stems;
+    stems.reserve(paths.size());
+    for (const auto& p : paths) {
+        stems.push_back(std::filesystem::path(p).stem().string());
+    }
+    if (stems.size() == 1) {
+        return stems[0];
+    }
+    std::string prefix = stems[0];
+    for (const auto& s : stems) {
+        std::size_t i = 0;
+        while (i < prefix.size() && i < s.size() && prefix[i] == s[i]) {
+            ++i;
+        }
+        prefix.resize(i);
+    }
+    while (!prefix.empty() && std::string("_-. ").find(prefix.back()) != std::string::npos) {
+        prefix.pop_back();
+    }
+    if (prefix.size() >= 2) {
+        return prefix;
+    }
+    return std::filesystem::path(paths[0]).parent_path().filename().string();
 }
 
 std::vector<Track> expandTracksFromProbedFiles(const std::vector<ProbedFile>& files, int startOutputChannel) {
