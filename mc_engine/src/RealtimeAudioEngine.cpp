@@ -351,6 +351,22 @@ std::uint64_t RealtimeAudioEngine::underrunCount() const noexcept {
     return total;
 }
 
+float RealtimeAudioEngine::trackPeak(std::size_t track) const noexcept {
+    return impl_->mixer ? impl_->mixer->trackPeak(track) : 0.0f;
+}
+float RealtimeAudioEngine::trackRms(std::size_t track) const noexcept {
+    return impl_->mixer ? impl_->mixer->trackRms(track) : 0.0f;
+}
+float RealtimeAudioEngine::outputPeak(std::size_t output) const noexcept {
+    return impl_->mixer ? impl_->mixer->outputPeak(output) : 0.0f;
+}
+float RealtimeAudioEngine::outputRms(std::size_t output) const noexcept {
+    return impl_->mixer ? impl_->mixer->outputRms(output) : 0.0f;
+}
+std::size_t RealtimeAudioEngine::numOutputs() const noexcept {
+    return impl_->numOutputs;
+}
+
 void RealtimeAudioEngine::setTrackGainDb(std::size_t track, float db) {
     if (impl_->mixer) {
         impl_->mixer->setTrackGainDb(track, db);

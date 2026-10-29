@@ -158,6 +158,41 @@ TEST_CASE("setGainMatrix takes effect on the next processBlock call (live routin
     REQUIRE(out[(100 * 2) + 1] == Catch::Approx(1.0f).margin(1e-3));
 }
 
+TEST_CASE("Track and output meters reflect the post-fader signal", "[engine][piecemixer]") {
+    constexpr double sr = 48000.0;
+    PieceMixer mixer(1, 1, sr, 4096);
+    mixer.masterLimiter().setEnabled(false);
+    mixer.start();
+
+    ConstantSource a(0.5f);
+    std::vector<SampleSource*> tracks{&a};
+    std::vector<float> out(4096);
+    for (int i = 0; i < 5; ++i) {
+        mixer.processBlock(tracks, out.data(), 4096);
+    }
+
+    REQUIRE(mixer.trackPeak(0) == Catch::Approx(0.5f).margin(1e-3));
+    REQUIRE(mixer.trackRms(0) == Catch::Approx(0.5f).margin(1e-3));
+    REQUIRE(mixer.outputPeak(0) == Catch::Approx(0.5f).margin(1e-3));
+    REQUIRE(mixer.outputRms(0) == Catch::Approx(0.5f).margin(1e-3));
+}
+
+TEST_CASE("A muted track's meter reads 0", "[engine][piecemixer]") {
+    constexpr double sr = 48000.0;
+    PieceMixer mixer(1, 1, sr, 4096);
+    mixer.masterLimiter().setEnabled(false);
+    mixer.setTrackMuted(0, true);
+    mixer.start();
+
+    ConstantSource a(1.0f);
+    std::vector<SampleSource*> tracks{&a};
+    std::vector<float> out(4096);
+    for (int i = 0; i < 15; ++i) {
+        mixer.processBlock(tracks, out.data(), 4096);
+    }
+    REQUIRE(mixer.trackPeak(0) == Catch::Approx(0.0f).margin(1e-4));
+}
+
 TEST_CASE("isSilent reports true only after stop() and the release tail finishes", "[engine][piecemixer]") {
     constexpr double sr = 48000.0;
     PieceMixer mixer(1, 1, sr, 4096);

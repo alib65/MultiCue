@@ -15,13 +15,30 @@ PieceMixer::PieceMixer(std::size_t numTracks, std::size_t numOutputs, double sam
       currentGainLinear_(numTracks, 1.0f),
       muted_(numTracks, false),
       solo_(numTracks, false),
-      masterLimiter_(sampleRate, numOutputs, 5.0) {
+      masterLimiter_(sampleRate, numOutputs, 5.0),
+      trackPeakMeter_(numTracks),
+      trackRmsMeter_(numTracks),
+      outputPeakMeter_(numOutputs),
+      outputRmsMeter_(numOutputs) {
     setGainMatrix(GainMatrix::identityDirect(numTracks, numOutputs));
     envelopes_.reserve(numTracks);
     for (std::size_t i = 0; i < numTracks; ++i) {
         envelopes_.emplace_back(sampleRate);
     }
     trackScratch_.assign(numTracks, std::vector<float>(maxBlockFrames, 0.0f));
+}
+
+float PieceMixer::trackPeak(std::size_t track) const noexcept {
+    return (track < trackPeakMeter_.size()) ? trackPeakMeter_[track].load(std::memory_order_acquire) : 0.0f;
+}
+float PieceMixer::trackRms(std::size_t track) const noexcept {
+    return (track < trackRmsMeter_.size()) ? trackRmsMeter_[track].load(std::memory_order_acquire) : 0.0f;
+}
+float PieceMixer::outputPeak(std::size_t output) const noexcept {
+    return (output < outputPeakMeter_.size()) ? outputPeakMeter_[output].load(std::memory_order_acquire) : 0.0f;
+}
+float PieceMixer::outputRms(std::size_t output) const noexcept {
+    return (output < outputRmsMeter_.size()) ? outputRmsMeter_[output].load(std::memory_order_acquire) : 0.0f;
 }
 
 void PieceMixer::setGainMatrix(const GainMatrix& matrix) {
@@ -88,10 +105,14 @@ std::size_t PieceMixer::processBlock(const std::vector<SampleSource*>& tracks, f
         const float target = audible ? targetGainLinear_[t] : 0.0f;
         const float smoothCoeff = static_cast<float>(std::exp(-1.0 / (0.05 * sampleRate_)));
 
+        float peak = 0.0f;
+        float sumSquares = 0.0f;
         for (std::size_t frame = 0; frame < numFrames; ++frame) {
             currentGainLinear_[t] += (target - currentGainLinear_[t]) * (1.0f - smoothCoeff);
             const float env = envelopes_[t].nextSample();
             const float amp = scratch[frame] * currentGainLinear_[t] * env;
+            peak = std::max(peak, std::abs(amp));
+            sumSquares += amp * amp;
             if (amp == 0.0f) {
                 continue;
             }
@@ -102,9 +123,24 @@ std::size_t PieceMixer::processBlock(const std::vector<SampleSource*>& tracks, f
                 }
             }
         }
+        trackPeakMeter_[t].store(peak, std::memory_order_release);
+        trackRmsMeter_[t].store(std::sqrt(sumSquares / static_cast<float>(numFrames)), std::memory_order_release);
     }
 
     masterLimiter_.process(outInterleaved, numFrames);
+
+    for (std::size_t o = 0; o < numOutputs_; ++o) {
+        float peak = 0.0f;
+        float sumSquares = 0.0f;
+        for (std::size_t frame = 0; frame < numFrames; ++frame) {
+            const float v = outInterleaved[(frame * numOutputs_) + o];
+            peak = std::max(peak, std::abs(v));
+            sumSquares += v * v;
+        }
+        outputPeakMeter_[o].store(peak, std::memory_order_release);
+        outputRmsMeter_[o].store(std::sqrt(sumSquares / static_cast<float>(numFrames)), std::memory_order_release);
+    }
+
     return shortfall;
 }
 

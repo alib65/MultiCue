@@ -55,6 +55,20 @@ public:
 
     MasterLimiter& masterLimiter() { return masterLimiter_; }
 
+    // Per-block peak/RMS, updated at the end of every processBlock() call
+    // (lock-free atomics, no allocation/logging): a UI-facing metering
+    // snapshot per docs/ARCHITECTURE.md §3.2 ("state from the engine to the
+    // UI ... through lock-free or atomic snapshots"). Track meters reflect
+    // the signal after fader/envelope/mute-solo (so a muted track reads 0);
+    // output meters are post-limiter, the true signal that reaches the
+    // device. Peak-HOLD-with-decay is a presentation concern, left to the
+    // UI polling these every frame, same as the reference does at its UI
+    // layer rather than in the audio synth.
+    float trackPeak(std::size_t track) const noexcept;
+    float trackRms(std::size_t track) const noexcept;
+    float outputPeak(std::size_t output) const noexcept;
+    float outputRms(std::size_t output) const noexcept;
+
     // Pulls up to numFrames from each of `tracks` (tracks.size() must equal
     // numTracks passed to the constructor), mixes and writes
     // numFrames * numOutputs interleaved floats to `outInterleaved`
@@ -78,6 +92,11 @@ private:
     std::vector<std::vector<float>> trackScratch_;
 
     MasterLimiter masterLimiter_;
+
+    std::vector<std::atomic<float>> trackPeakMeter_;
+    std::vector<std::atomic<float>> trackRmsMeter_;
+    std::vector<std::atomic<float>> outputPeakMeter_;
+    std::vector<std::atomic<float>> outputRmsMeter_;
 };
 
 } // namespace mc::engine

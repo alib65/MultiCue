@@ -51,6 +51,15 @@ public:
     double pieceDurationSeconds() const noexcept { return pieceDurationSeconds_; }
 
     std::uint64_t underrunCount() const noexcept;
+
+    // Metering snapshot (see PieceMixer::trackPeak() et al.); 0 if nothing
+    // is loaded or the index is out of range. Safe to poll from the UI
+    // thread at any rate (e.g. a 30+ fps timer).
+    float trackPeak(std::size_t track) const noexcept;
+    float trackRms(std::size_t track) const noexcept;
+    float outputPeak(std::size_t output) const noexcept;
+    float outputRms(std::size_t output) const noexcept;
+    std::size_t numOutputs() const noexcept;
     std::string lastError() const { return lastError_; }
 
     // True once the device has reported a disconnect (e.g. unplugged)
