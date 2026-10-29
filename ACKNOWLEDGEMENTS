@@ -1,0 +1,22 @@
+MultiCue's audio engine is a deliberate C++ port of the spatial-audio and
+loudness algorithms in:
+
+  MultichannelPlayer
+  https://github.com/alib65/MultichannelPlayer
+  Copyright (c) 2026 Ali Balighi
+  MIT License
+
+MultichannelPlayer is a SuperCollider playlist player for multichannel music
+made from separate mono files. Its layout presets, spherical-harmonics
+Ambisonic encoding/decoding (ACN/SN3D, AllRAD, max-rE), VBAP panning with
+imaginary speakers, constant-power stereo downmix, FuMa/AmbiX conversion, and
+EBU R128 / ITU-R BS.1770 loudness analysis are ported into mc_dsp and
+mc_engine; see docs/ARCHITECTURE.md section 0 for the full function-by-
+function mapping. Thank you to Ali Balighi for releasing the original work
+under the MIT license, which made this port possible.
+
+---
+
+Third-party libraries used by MultiCue are listed with their license in
+docs/ROADMAP.md's dependency log, and reproduced at build time in the
+application's About dialog once that exists (see docs/ROADMAP.md, M8).

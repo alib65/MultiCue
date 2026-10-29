@@ -357,5 +357,5 @@ FFmpeg, pffft, libmysofa, liblo/oscpack, RtMidi, Catch2 v3) is coherent, all
 permissively/LGPL licensed consistent with a GPL-3.0-or-later app, and each
 piece maps cleanly onto one module above. If a specific version/license check
 in M0 turns up a problem (e.g. a dependency has relicensed, or FFmpeg's LGPL
-build excludes a codec this project needs), that will be raised at that point
+[ARCHITECTURE.md](ARCHITECTURE.md)build excludes a codec this project needs), that will be raised at that point
 rather than guessed at here.

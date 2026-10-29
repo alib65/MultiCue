@@ -19,7 +19,15 @@ added — not recalled from memory. Logged here as it happens:
 
 | Dependency | Checked | Version | License | Notes |
 |---|---|---|---|---|
-| *(none yet — first check happens in M0)* | | | | |
+| RtAudio | 2026-10-29 | 6.0.1 | MIT | Via Homebrew bottle (local dev) and vcpkg port (CI); both export the same `rtaudio` pkg-config module, vcpkg additionally exports a `RtAudio::rtaudio` CMake target. Both paths built and tested locally. |
+| Catch2 | 2026-10-29 | 3.16.1 | BSL-1.0 (Boost) | Same dual-path story as RtAudio; `Catch2::Catch2WithMain` CMake target confirmed from both Homebrew and vcpkg. |
+| Qt | 2026-10-29 | 6.11.1 (local Homebrew) / 6.11.3 (pinned in CI via aqtinstall) | BSD-3-Clause AND GPL-2.0-only AND (GPL-3.0-only WITH Qt-GPL-exception-1.0) AND LGPL-3.0-only (multi-licensed; Widgets module used here under LGPL-3.0-only, linked dynamically, per the project brief) | `brew info qt` / aqtinstall. Homebrew's current stable is 6.12.0; 6.11.x was kept locally to match what was already installed and what CI pins — bump to 6.12.x is a deliberate future decision, not an oversight. |
+| vcpkg | 2026-10-29 | git commit `a27c8b7e…` (builtin-baseline in `vcpkg.json`) | MIT | Bootstrapped locally outside the repo (`~/vcpkg`) to verify the CI mechanism end-to-end before committing to it; GitHub-hosted runners have it preinstalled at `$VCPKG_INSTALLATION_ROOT`. |
+
+Dependencies not yet added (libsndfile, FFmpeg, libsamplerate/r8brain-free,
+pffft, libmysofa, liblo/oscpack, RtMidi) get their own row here at the
+milestone that first links them (M1, M3, M4, M6, M7 respectively), not
+before — see each milestone's checklist below.
 
 ## M0 — Skeleton
 
@@ -27,29 +35,60 @@ Goal: a repo that builds and boots on all three OSes, with a device list and a
 test tone — the minimum slice that proves the toolchain, CI, and real-time
 audio path all work together.
 
-- [ ] Root `CMakeLists.txt`: project name/version from `AppInfo.h` pattern
-      (`docs/ARCHITECTURE.md` intro), C++20, targets for `mc_core`, `mc_dsp`,
-      `mc_engine`, `multicue`, `multicue-cli` (empty/stub bodies acceptable
-      here; `mc_video`/`mc_control` stubs can wait for M6/M7).
-- [ ] vcpkg manifest (`vcpkg.json`) or FetchContent setup for: RtAudio,
-      libsndfile, Catch2 v3 (first dependencies actually needed). Each gets a
-      version/license check logged in the table above before being pinned.
-- [ ] GitHub Actions CI: macOS (universal), Windows x64, Ubuntu — build +
-      test matrix, no warnings treated as the pass bar.
-- [ ] `mc_engine`: RtAudio device enumeration + open/close, a single test-tone
-      voice to a chosen output, sample-accurate start scaffolding (even if
-      only one voice exists yet).
-- [ ] `multicue`: Qt 6 Widgets app window, dark theme default, device picker,
-      "play test tone" button. HiDPI and full keyboard operability checked
-      manually.
-- [ ] `multicue-cli`: `list-devices` subcommand.
-- [ ] Catch2 wired into CTake/CI; one real test (test-tone buffer content) to
-      prove the harness works end to end.
-- [ ] `README.md` created: project description, build instructions, credit to
-      MultichannelPlayer (MIT) per `docs/ARCHITECTURE.md` §0.
-- [ ] `CHANGELOG.md` created, `ACKNOWLEDGEMENTS` created crediting
+**Deliberate scope adjustment vs. the original plan:** `mc_dsp` is not
+created in M0. Nothing in M0 needs spatial/loudness math, so an empty
+placeholder module would just be scaffolding presented as progress; it is
+created in M3 when `layoutPreset()` etc. are first implemented. Likewise
+`mc_video`/`mc_control` arrive in M6/M7. The module *list* in
+`docs/ARCHITECTURE.md` §2 is unchanged — this only affects when each
+`add_subdirectory()` actually appears.
+
+- [x] Root `CMakeLists.txt`: project name/version from `AppInfo.h` pattern
+      (`docs/ARCHITECTURE.md` intro), C++20, targets for `mc_core`,
+      `mc_engine`, `multicue`, `multicue-cli`.
+- [x] vcpkg manifest (`vcpkg.json`): RtAudio (with a `platform: linux` feature
+      block for ALSA/PulseAudio), Catch2. Paired with a dual CMake-config /
+      pkg-config lookup (`cmake/FindRtAudioPortable.cmake`) so the identical
+      `CMakeLists.txt` works against vcpkg (CI) or a system package manager
+      (local dev) — both paths were configured, built and tested locally
+      before being committed (see the dependency log above).
+- [x] GitHub Actions CI: macOS, Windows x64, Ubuntu — build + test matrix via
+      the vcpkg manifest and `jurplel/install-qt-action`, `-Wall -Wextra
+      -Wpedantic` (no warnings observed locally on macOS). **Not yet verified
+      by an actual GitHub Actions run** — this repository has not been
+      pushed to any remote (the user explicitly asked for it to stay local),
+      so the Windows and Ubuntu legs are reviewed-but-unrun. Carried forward
+      as an open item below rather than claimed as passing.
+- [x] `mc_engine`: RtAudio device enumeration (`DeviceInfo.h`/`.cpp`), a
+      single test-tone voice to a chosen output and channel
+      (`TestToneEngine`), built on a pure, allocation-free sine generator
+      (`SineGenerator.h`/`.cpp`) called directly from the RtAudio callback —
+      i.e. the audio-thread rules from `docs/ARCHITECTURE.md` §3.1 are
+      followed starting now, not retrofitted later. Sample-accurate *cue*
+      scheduling (vs. this single ad hoc stream) is still M1 scope.
+- [x] `multicue`: Qt 6 Widgets app window, dark theme by default
+      (`DarkTheme.cpp`, Fusion style + a dark `QPalette`), device picker,
+      channel picker, play/stop test-tone button, live underrun count.
+      Keyboard operability relies on Qt's native tab/focus handling (no
+      custom keyboard traps yet to verify); HiDPI is on by default in Qt6.
+      Launched locally and confirmed it starts, stays running, and exits
+      cleanly; visual/keyboard verification was by process-level check only
+      (no screenshot tool available for a native desktop window in this
+      environment) -- a manual visual pass is still worth doing before M0 is
+      called fully done.
+- [x] `multicue-cli`: `list-devices` and `version` subcommands. Verified
+      against real hardware (`list-devices` correctly listed 4 real output
+      devices on the dev machine).
+- [x] Catch2 wired into CTest; 7 real tests across `mc_core`/`mc_engine`
+      (version string, sine-generator silence/amplitude/phase-continuity/
+      zero-channel safety, device enumeration never throws) — all passing
+      locally via both dependency paths.
+- [x] `README.md` created: project description, build instructions (both
+      dependency paths), credit to MultichannelPlayer (MIT) per
+      `docs/ARCHITECTURE.md` §0, explicit CI-status caveat.
+- [x] `CHANGELOG.md` created, `ACKNOWLEDGEMENTS` created crediting
       MultichannelPlayer and Ali Balighi.
-- [ ] `LICENSE`: GPL-3.0-or-later.
+- [x] `LICENSE`: GPL-3.0-or-later, verbatim text from gnu.org.
 
 ## M1 — Engine core
 
@@ -227,4 +266,19 @@ Goal: every listening format from the reference, plus the fixes from §5.
 
 ## Open items (carried forward, not yet done)
 
-*(empty — populated as milestones land short of full scope)*
+- **M0 CI is unverified on Windows and Ubuntu.** `.github/workflows/ci.yml`
+  is written and its mechanism (vcpkg manifest install + CMake config) was
+  validated locally on macOS against both the Homebrew/pkg-config path and
+  the actual vcpkg/CMake-config path, but no GitHub Actions run has happened
+  because this repository has intentionally not been pushed to a remote.
+  Close this item the first time the repo is pushed and the workflow runs
+  green on all three OSes.
+- **M0's "fully keyboard-operable" and "HiDPI" bullets are asserted, not
+  independently tested.** Qt's defaults cover both, and the window was
+  launched and exercised at the process level, but no one has tabbed through
+  every control by hand or checked it on a HiDPI display yet.
+- RtAudio's Linux vcpkg feature set (`alsa`, `pulse`) is specified in
+  `vcpkg.json` and matches documented vcpkg manifest syntax, but has not
+  been built on an actual Linux machine (none available in this
+  environment) — first real signal comes from the first Ubuntu CI run, per
+  the item above.
