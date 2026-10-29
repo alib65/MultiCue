@@ -14,6 +14,7 @@ add_library(mc_engine STATIC
   src/OfflineRenderer.cpp
   src/Voice.cpp
   src/RealtimeAudioEngine.cpp
+  src/AudioFileProbe.cpp
 )
 
 target_include_directories(mc_engine PUBLIC
