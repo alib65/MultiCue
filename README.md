@@ -48,11 +48,16 @@ Catch2 v3.
 ### macOS (Homebrew)
 
 ```sh
-brew install qt rtaudio catch2
+brew install qt rtaudio catch2 libsndfile libsamplerate nlohmann-json
 cmake -S . -B build -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
+
+If Anaconda/conda is on your `PATH`, CMake may find its (older) copy of
+nlohmann-json instead of Homebrew's; if `cmake` output says it found a
+version other than the one in `docs/ROADMAP.md`'s dependency log, pin it
+explicitly: add `-Dnlohmann_json_DIR="$(brew --prefix nlohmann-json)/share/cmake/nlohmann_json"`.
 
 ### Any platform, via the vcpkg manifest
 
