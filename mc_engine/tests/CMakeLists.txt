@@ -8,6 +8,7 @@ add_executable(mc_engine_tests
   PieceMixerTests.cpp
   OfflineRendererTests.cpp
   VoiceTests.cpp
+  AudioFileProbeTests.cpp
 )
 
 target_link_libraries(mc_engine_tests PRIVATE mc_engine Catch2::Catch2WithMain multicue_warnings multicue_sanitizers)
