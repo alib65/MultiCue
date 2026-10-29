@@ -1,0 +1,17 @@
+{
+  "name": "multicue",
+  "version": "0.1.0",
+  "builtin-baseline": "a27c8b7ec35e9eaad27c6e3e6e795742eeeceb58",
+  "dependencies": [
+    {
+      "name": "rtaudio",
+      "platform": "linux",
+      "features": ["alsa", "pulse"]
+    },
+    {
+      "name": "rtaudio",
+      "platform": "!linux"
+    },
+    "catch2"
+  ]
+}
