@@ -1,0 +1,13 @@
+build/
+build-*/
+out/
+vcpkg_installed/
+*.log
+.DS_Store
+*.user
+CMakeUserPresets.json
+
+# Local tooling state, not project source
+.claude/
+.idea/
+.code-review-graph/
