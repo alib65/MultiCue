@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QIcon>
 
 #include "DarkTheme.h"
 #include "MainWindow.h"
@@ -7,6 +8,7 @@
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     mc::app::applyDarkTheme();
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/icon.png")));
     QApplication::setApplicationName(QString::fromUtf8(mc::core::kAppName.data(), static_cast<int>(mc::core::kAppName.size())));
     QApplication::setOrganizationName(
         QString::fromUtf8(mc::core::kAppOrganization.data(), static_cast<int>(mc::core::kAppOrganization.size())));
