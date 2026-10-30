@@ -35,6 +35,7 @@ else()
 endif()
 
 add_subdirectory(mc_core)
+add_subdirectory(mc_dsp)
 add_subdirectory(mc_engine)
 add_subdirectory(apps/multicue-cli)
 add_subdirectory(apps/multicue)
