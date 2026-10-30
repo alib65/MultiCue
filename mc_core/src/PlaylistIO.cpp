@@ -70,6 +70,7 @@ json pieceToJson(const Piece& p) {
         {"trimDb", p.trimDb},
         {"srcFormat", srcFormatToString(p.srcFormat)},
         {"layoutIdx", p.layoutIdx},
+        {"videoPath", p.videoPath},
         {"tracks", tracks},
     };
 }
@@ -80,6 +81,7 @@ Piece pieceFromJson(const json& j) {
     p.trimDb = j.value("trimDb", 0.0f);
     p.srcFormat = srcFormatFromString(j.value("srcFormat", std::string("multi")));
     p.layoutIdx = j.value("layoutIdx", 0);
+    p.videoPath = j.value("videoPath", std::string());
     if (j.contains("tracks") && j["tracks"].is_array()) {
         for (const auto& tj : j["tracks"]) {
             p.tracks.push_back(trackFromJson(tj));

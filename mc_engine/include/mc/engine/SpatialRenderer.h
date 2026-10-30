@@ -52,6 +52,7 @@ struct SpatialRenderResult {
     // back as a matrix.
     GainMatrix sourceToVirtual;
     std::vector<std::pair<double, double>> virtualDirections;
+    std::vector<bool> virtualIsLfe; // parallel to virtualDirections; true bypasses HRTF filtering
 
     int effectiveOrder = 0;
     double stereoStartChannelUsed = 0; // echoes back the start channel actually used

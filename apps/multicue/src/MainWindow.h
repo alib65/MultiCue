@@ -10,6 +10,7 @@
 #include "mc/core/Playlist.h"
 #include "mc/engine/DeviceInfo.h"
 #include "mc/engine/RealtimeAudioEngine.h"
+#include "mc/video/VideoSurfaceWidget.h"
 
 class QListWidget;
 class QListWidgetItem;
@@ -83,6 +84,9 @@ private slots:
     void onAutoAdvanceToggled(bool checked);
     void onGapChanged(double seconds);
     void onPollTick();
+    void onAddVideo();
+    void onClearVideo();
+    void onToggleVideoWindow();
 
 private:
     double nowSeconds() const;
@@ -127,8 +131,12 @@ private:
 
     QSpinBox* outputsBox_ = nullptr;
     QComboBox* deviceCombo_ = nullptr;
+    QComboBox* formatCombo_ = nullptr;
     QPushButton* applyButton_ = nullptr;
     QLabel* statusLabel_ = nullptr;
+
+    bool directMode_ = true;
+    mc::engine::ListeningFormat selectedFormat_ = mc::engine::ListeningFormat::Ambisonics;
 
     QListWidget* playlistList_ = nullptr;
     QLabel* playlistInfoLabel_ = nullptr;
@@ -147,6 +155,12 @@ private:
     QLabel* pieceInfoLabel_ = nullptr;
     QSlider* trimSlider_ = nullptr;
     QDoubleSpinBox* trimSpin_ = nullptr;
+
+    QPushButton* addVideoButton_ = nullptr;
+    QLabel* videoStatusLabel_ = nullptr;
+    QPushButton* showVideoButton_ = nullptr;
+    QWidget* videoWindow_ = nullptr;
+    mc::video::VideoSurfaceWidget* videoWidget_ = nullptr;
 
     QScrollArea* mixerScroll_ = nullptr;
 

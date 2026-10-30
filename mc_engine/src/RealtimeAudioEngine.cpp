@@ -3,12 +3,14 @@
 #include <RtAudio.h>
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <thread>
 
 #include "mc/engine/GainMatrix.h"
 #include "mc/engine/PieceMixer.h"
+#include "mc/engine/SpatialLayout.h"
 #include "mc/engine/Voice.h"
 
 namespace mc::engine {
@@ -179,7 +181,9 @@ bool RealtimeAudioEngine::loadPiece(std::uint32_t deviceId,
                                    const std::vector<std::string>& trackPaths,
                                    std::size_t numOutputs,
                                    const std::vector<int>& outputChannels,
-                                   double startSeconds) {
+                                   double startSeconds,
+                                   const mc::core::Piece* spatialPiece,
+                                   std::optional<ListeningFormat> format) {
     unload();
 
     if (trackPaths.empty() || numOutputs == 0) {
@@ -220,14 +224,21 @@ bool RealtimeAudioEngine::loadPiece(std::uint32_t deviceId,
     }
 
     auto mixer = std::make_unique<PieceMixer>(voices.size(), numOutputs, sampleRate, kBufferFrames * 4);
-    GainMatrix matrix(voices.size(), numOutputs);
-    for (std::size_t i = 0; i < voices.size(); ++i) {
-        const int out = outputChannels.empty() ? static_cast<int>(i) : outputChannels[i];
-        if (out >= 0 && static_cast<std::size_t>(out) < numOutputs) {
-            matrix.setGain(i, static_cast<std::size_t>(out), 1.0f);
+    if (format.has_value() && spatialPiece != nullptr) {
+        const auto venue = buildVenueLayoutFromPreset(spatialPiece->layoutIdx, numOutputs);
+        const auto result = renderListeningFormat(*format, 0, *spatialPiece, venue, 0);
+        assert(!result.isBinaural && "Binaural has no real-time renderer yet; keep it out of the UI's format choices");
+        mixer->setGainMatrix(result.matrix);
+    } else {
+        GainMatrix matrix(voices.size(), numOutputs);
+        for (std::size_t i = 0; i < voices.size(); ++i) {
+            const int out = outputChannels.empty() ? static_cast<int>(i) : outputChannels[i];
+            if (out >= 0 && static_cast<std::size_t>(out) < numOutputs) {
+                matrix.setGain(i, static_cast<std::size_t>(out), 1.0f);
+            }
         }
+        mixer->setGainMatrix(matrix);
     }
-    mixer->setGainMatrix(matrix);
 
     std::vector<SampleSource*> sourcePtrs;
     sourcePtrs.reserve(voices.size());

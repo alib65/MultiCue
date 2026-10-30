@@ -12,4 +12,4 @@ add_executable(multicue
   src/LevelMeterWidget.h
 )
 
-target_link_libraries(multicue PRIVATE mc_core mc_engine Qt6::Widgets multicue_warnings multicue_sanitizers)
+target_link_libraries(multicue PRIVATE mc_core mc_engine mc_video Qt6::Widgets multicue_warnings multicue_sanitizers)

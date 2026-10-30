@@ -3,8 +3,12 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
+
+#include "mc/core/Piece.h"
+#include "mc/engine/SpatialRenderer.h"
 
 namespace mc::engine {
 
@@ -32,11 +36,18 @@ public:
     // piece first. Returns false and sets lastError() on failure.
     // `outputChannels` gives each track's direct-mode output (0-based); pass
     // an empty vector for the common case of track i -> output i.
+    // `spatialPiece`/`format`: when both are set, the direct `outputChannels`
+    // routing above is replaced by mc::engine::renderListeningFormat()'s
+    // gain matrix for `format` (Ambisonics/Vbap/Stereo/BFormat only --
+    // Binaural isn't wired to a real-time renderer yet, see BinauralStage).
+    // `spatialPiece` must outlive this call (read once, synchronously).
     bool loadPiece(std::uint32_t deviceId,
                    const std::vector<std::string>& trackPaths,
                    std::size_t numOutputs,
                    const std::vector<int>& outputChannels = {},
-                   double startSeconds = 0.0);
+                   double startSeconds = 0.0,
+                   const mc::core::Piece* spatialPiece = nullptr,
+                   std::optional<ListeningFormat> format = std::nullopt);
 
     void unload();
 

@@ -1,5 +1,10 @@
 # MultiCue
 
+https://github.com/alib65/MultiCue
+
+Ali Balighi © 2026
+alibalighi.com
+
 MultiCue is a cue-based, multichannel audio and video show player for
 theatre, concerts, installations and electroacoustic music: QLab-class show
 control with first-class support for multichannel speaker feeds made of

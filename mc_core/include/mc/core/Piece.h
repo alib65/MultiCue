@@ -27,6 +27,12 @@ struct Piece {
     // numbering (-1 = custom angles, not a preset). Irrelevant for AmbiX/
     // FuMa pieces.
     int layoutIdx = 0;
+
+    // Optional video shown in sync with this piece's audio (mc_video,
+    // M6 slice: docs/ARCHITECTURE.md Sec 3.6/7). Empty = no attached video;
+    // the video's own embedded audio (if any) is never decoded -- the
+    // tracks above are the piece's audio.
+    std::string videoPath;
 };
 
 // Longest track in the piece, matching the reference's pieceSecs (the piece

@@ -6,6 +6,7 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -15,6 +16,7 @@
 #include <QScrollArea>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStandardItemModel>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -27,6 +29,7 @@
 #include "mc/core/PlaylistIO.h"
 #include "mc/core/Version.h"
 #include "mc/engine/AudioFileProbe.h"
+#include "mc/engine/SpatialLayout.h"
 
 namespace mc::app {
 
@@ -70,6 +73,19 @@ MainWindow::MainWindow(QWidget* parent) : QWidget(parent), engine_(std::make_uni
     outputsBox_->setRange(1, 128);
     outputsBox_->setValue(numOutputs_);
     deviceCombo_ = new QComboBox(this);
+    formatCombo_ = new QComboBox(this);
+    formatCombo_->addItem(tr("Direct"));
+    formatCombo_->addItem(tr("Ambisonics"));
+    formatCombo_->addItem(tr("VBAP"));
+    formatCombo_->addItem(tr("Stereo"));
+    formatCombo_->addItem(tr("B-Format"));
+    formatCombo_->addItem(tr("Binaural"));
+    if (auto* model = qobject_cast<QStandardItemModel*>(formatCombo_->model())) {
+        if (auto* binauralItem = model->item(5)) {
+            binauralItem->setEnabled(false);
+        }
+    }
+    formatCombo_->setItemData(5, tr("Binaural HRTF rendering is not implemented yet"), Qt::ToolTipRole);
     applyButton_ = new QPushButton(tr("Apply"), this);
     statusLabel_ = new QLabel(this);
     statusLabel_->setWordWrap(true);
@@ -79,12 +95,39 @@ MainWindow::MainWindow(QWidget* parent) : QWidget(parent), engine_(std::make_uni
             selectedDeviceId_ = devices_[static_cast<std::size_t>(index)].id;
         }
     });
+    connect(formatCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int index) {
+        directMode_ = (index == 0);
+        switch (index) {
+            case 1: selectedFormat_ = mc::engine::ListeningFormat::Ambisonics; break;
+            case 2: selectedFormat_ = mc::engine::ListeningFormat::Vbap; break;
+            case 3: selectedFormat_ = mc::engine::ListeningFormat::Stereo; break;
+            case 4: selectedFormat_ = mc::engine::ListeningFormat::BFormat; break;
+            default: break; // Direct (0) and Binaural (5, disabled) don't set selectedFormat_
+        }
+        for (const auto& strip : strips_) {
+            if (strip.outputSpin) strip.outputSpin->setEnabled(directMode_);
+        }
+    });
+
+    showVideoButton_ = new QPushButton(tr("Show Video"), this);
+    connect(showVideoButton_, &QPushButton::clicked, this, &MainWindow::onToggleVideoWindow);
+
+    videoWindow_ = new QWidget(nullptr);
+    videoWindow_->setWindowTitle(tr("MultiCue Video"));
+    videoWindow_->resize(960, 540);
+    videoWidget_ = new mc::video::VideoSurfaceWidget(videoWindow_);
+    auto* videoWindowLayout = new QVBoxLayout(videoWindow_);
+    videoWindowLayout->setContentsMargins(0, 0, 0, 0);
+    videoWindowLayout->addWidget(videoWidget_);
 
     auto* topBar = new QHBoxLayout();
     topBar->addWidget(new QLabel(tr("Outputs"), this));
     topBar->addWidget(outputsBox_);
     topBar->addWidget(new QLabel(tr("  Device"), this));
     topBar->addWidget(deviceCombo_, 1);
+    topBar->addWidget(new QLabel(tr("  Format"), this));
+    topBar->addWidget(formatCombo_);
+    topBar->addWidget(showVideoButton_);
     topBar->addWidget(applyButton_);
     topBar->addSpacing(12);
     topBar->addWidget(statusLabel_, 2);
@@ -203,13 +246,23 @@ MainWindow::MainWindow(QWidget* parent) : QWidget(parent), engine_(std::make_uni
     connect(addTracksBtn, &QPushButton::clicked, this, &MainWindow::onAddTracksToSelected);
     connect(allZeroBtn, &QPushButton::clicked, this, &MainWindow::onAllFadersZero);
 
+    addVideoButton_ = new QPushButton(tr("Video..."), this);
+    auto* clearVideoBtn = new QPushButton(tr("Clear video"), this);
+    videoStatusLabel_ = new QLabel(tr("No video"), this);
+    videoStatusLabel_->setStyleSheet("color: #999;");
+    connect(addVideoButton_, &QPushButton::clicked, this, &MainWindow::onAddVideo);
+    connect(clearVideoBtn, &QPushButton::clicked, this, &MainWindow::onClearVideo);
+
     auto* headerRow1 = new QHBoxLayout();
     headerRow1->addWidget(new QLabel(tr("Piece"), this));
     headerRow1->addWidget(titleField_, 1);
     headerRow1->addWidget(addTracksBtn);
     headerRow1->addWidget(allZeroBtn);
+    headerRow1->addWidget(addVideoButton_);
+    headerRow1->addWidget(clearVideoBtn);
     auto* headerRow2 = new QHBoxLayout();
     headerRow2->addWidget(pieceInfoLabel_, 1);
+    headerRow2->addWidget(videoStatusLabel_);
     headerRow2->addWidget(new QLabel(tr("Trim"), this));
     headerRow2->addWidget(trimSlider_);
     headerRow2->addWidget(trimSpin_);
@@ -283,7 +336,19 @@ MainWindow::MainWindow(QWidget* parent) : QWidget(parent), engine_(std::make_uni
     body->addWidget(leftPanel);
     body->addLayout(rightLayout, 1);
 
+    auto* titleLabel = new QLabel(tr("MultiCue"), this);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(titleFont.pointSize() + 6);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->setAlignment(Qt::AlignHCenter);
+
+    auto* authorLabel = new QLabel(tr("Ali Balighi © 2026 · alibalighi.com"), this);
+    authorLabel->setAlignment(Qt::AlignHCenter);
+
     auto* root = new QVBoxLayout(this);
+    root->addWidget(titleLabel);
+    root->addWidget(authorLabel);
     root->addLayout(topBar);
     root->addLayout(body, 1);
 
@@ -312,6 +377,8 @@ MainWindow::~MainWindow() {
     if (engine_) {
         engine_->unload();
     }
+    videoWidget_->close();
+    delete videoWindow_;
 }
 
 double MainWindow::nowSeconds() const {
@@ -350,6 +417,7 @@ void MainWindow::onApplyOutputs() {
     numOutputs_ = outputsBox_->value();
     if (engine_->isLoaded()) {
         engine_->unload();
+        videoWidget_->close();
         transport_ = Transport::Stopped;
         currentIndex_ = -1;
         refreshPlaylistList();
@@ -388,6 +456,7 @@ void MainWindow::addPieceFromFilePaths(const std::vector<std::string>& paths, co
           }())).toStdString()
         : titleOverride.toStdString();
     piece.tracks = mc::core::expandTracksFromProbedFiles(probed, 0);
+    mc::engine::applyLayoutToPiece(piece, piece.layoutIdx);
 
     playlist_.pieces.push_back(piece);
     selectedIndex_ = static_cast<int>(playlist_.pieces.size()) - 1;
@@ -653,7 +722,9 @@ void MainWindow::startPieceAt(int index, double seconds) {
         paths.push_back(t.path);
         outs.push_back(t.outputChannel);
     }
-    if (!engine_->loadPiece(selectedDeviceId_, paths, static_cast<std::size_t>(numOutputs_), outs, seconds)) {
+    if (!engine_->loadPiece(selectedDeviceId_, paths, static_cast<std::size_t>(numOutputs_), outs, seconds,
+                             directMode_ ? nullptr : &piece,
+                             directMode_ ? std::nullopt : std::optional(selectedFormat_))) {
         statusLabel_->setText(tr("Could not play \"%1\": %2")
                                   .arg(QString::fromStdString(piece.title))
                                   .arg(QString::fromStdString(engine_->lastError())));
@@ -669,6 +740,16 @@ void MainWindow::startPieceAt(int index, double seconds) {
     engine_->setCeilingDb(static_cast<float>(ceilingSpin_->value()));
     engine_->setLimiterEnabled(limiterBox_->isChecked());
     engine_->play();
+
+    if (!piece.videoPath.empty()) {
+        if (!videoWidget_->open(piece.videoPath, seconds)) {
+            statusLabel_->setText(tr("Could not open video \"%1\": %2")
+                                      .arg(QFileInfo(QString::fromStdString(piece.videoPath)).fileName())
+                                      .arg(QString::fromStdString(videoWidget_->lastError())));
+        }
+    } else {
+        videoWidget_->close();
+    }
 
     currentIndex_ = index;
     selectedIndex_ = index;
@@ -763,6 +844,7 @@ void MainWindow::stopImmediately() {
     if (engine_->isLoaded()) {
         engine_->stop(); // blocking: acceptable for New/Open/Remove, not for the Stop button
     }
+    videoWidget_->close();
     awaitingStopFade_ = false;
     transport_ = Transport::Stopped;
     currentIndex_ = -1;
@@ -771,6 +853,7 @@ void MainWindow::stopImmediately() {
 void MainWindow::onPieceFinished() {
     const int finished = currentIndex_;
     engine_->unload();
+    videoWidget_->close();
     currentIndex_ = -1;
     const int next = finished + 1;
     if (autoAdvanceBox_->isChecked() && next < static_cast<int>(playlist_.pieces.size())) {
@@ -809,6 +892,7 @@ void MainWindow::onPositionSliderReleased() {
         startPieceAt(idx, seconds);
     } else if (transport_ == Transport::Paused) {
         engine_->unload();
+        videoWidget_->close();
         transport_ = Transport::Stopped;
         currentIndex_ = -1;
         refreshTransportLabel();
@@ -835,6 +919,7 @@ void MainWindow::refreshPieceHeader() {
     if (!hasSelection) {
         titleField_->setText({});
         pieceInfoLabel_->setText({});
+        videoStatusLabel_->setText(tr("No video"));
         return;
     }
     const auto& p = playlist_.pieces[static_cast<std::size_t>(selectedIndex_)];
@@ -846,6 +931,9 @@ void MainWindow::refreshPieceHeader() {
     trimSpin_->setValue(p.trimDb);
     trimSpin_->blockSignals(false);
     pieceInfoLabel_->setText(tr("%1 track(s) - %2").arg(p.tracks.size()).arg(formatTime(mc::core::pieceDurationSeconds(p))));
+    videoStatusLabel_->setText(p.videoPath.empty()
+                                    ? tr("No video")
+                                    : tr("Video: %1").arg(QFileInfo(QString::fromStdString(p.videoPath)).fileName()));
 }
 
 void MainWindow::onTitleEdited() {
@@ -906,6 +994,39 @@ void MainWindow::onAddTracksToSelected() {
     refreshPieceHeader();
     rebuildMixer();
     markDirty();
+}
+
+void MainWindow::onAddVideo() {
+    if (selectedIndex_ < 0) {
+        return;
+    }
+    const auto file = QFileDialog::getOpenFileName(this, tr("Attach a video to this piece"), {},
+                                                     tr("Video files (*.mp4 *.mov *.mkv *.webm *.avi *.m4v)"));
+    if (file.isEmpty()) {
+        return;
+    }
+    playlist_.pieces[static_cast<std::size_t>(selectedIndex_)].videoPath = file.toStdString();
+    refreshPieceHeader();
+    markDirty();
+}
+
+void MainWindow::onClearVideo() {
+    if (selectedIndex_ < 0) {
+        return;
+    }
+    playlist_.pieces[static_cast<std::size_t>(selectedIndex_)].videoPath.clear();
+    if (selectedIndex_ == currentIndex_) {
+        videoWidget_->close();
+    }
+    refreshPieceHeader();
+    markDirty();
+}
+
+void MainWindow::onToggleVideoWindow() {
+    videoWindow_->setVisible(!videoWindow_->isVisible());
+    if (videoWindow_->isVisible()) {
+        videoWindow_->raise();
+    }
 }
 
 void MainWindow::onAllFadersZero() {
@@ -1130,6 +1251,7 @@ void MainWindow::onPollTick() {
 
     if (awaitingStopFade_ && engine_->isStopFadeComplete()) {
         engine_->unload();
+        videoWidget_->close();
         awaitingStopFade_ = false;
         transport_ = Transport::Stopped;
         currentIndex_ = -1;
@@ -1157,6 +1279,10 @@ void MainWindow::onPollTick() {
         if (duration > 0.0 && pos >= duration - 0.05) {
             onPieceFinished();
         }
+    }
+
+    if (videoWidget_->isOpen() && engine_->isLoaded()) {
+        videoWidget_->syncToClock(engine_->positionSeconds());
     }
 
     // meters: only the currently-loaded piece's mixer has live numbers.
