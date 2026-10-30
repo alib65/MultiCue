@@ -173,23 +173,76 @@ it is not silently forgotten.
 Goal: parity with the reference's direct-mode feature set (`docs/
 ARCHITECTURE.md` §0 table), as a thin layer over the M1 engine.
 
-- [ ] `mc_core` data model: piece, track, playlist; show-file JSON
-      (de)serialisation with `schemaVersion` + migration table scaffold
-      (even if there's only one version so far).
-- [ ] Mixer per piece: fader/mute/solo/meter/peak-hold per track, piece trim,
-      master fader + output meters (UI + engine wiring).
-- [ ] Transport UI: play/pause/stop/prev/next, draggable position bar,
-      auto-advance with configurable gap **and** crossfade (fixing the
-      reference's gap-only limitation per §5).
-- [ ] Playlist editing: add files/folder/folder-of-folders, reorder,
-      duplicate, rename, missing-file ⚠ marking.
-- [ ] Autosave (~1 s after last edit, matching the reference's cadence) +
-      crash recovery on next launch.
-- [ ] Natural-sort file ordering (`mc_core::naturalSortKey()`, ported per
-      `docs/ARCHITECTURE.md` §0).
-- [ ] Source-format auto-detection from filenames (`detectSourceFormat()`).
-- [ ] Show-file round-trip tests; README/CHANGELOG updated with Playlist
-      mode usage.
+**Scope adjustment, logged as made:** source-format auto-detection
+(`detectSourceFormat()`, AmbiX/FuMa/layout guessing) is deferred to M3, same
+reasoning as `mc_dsp` itself (see M0's note) — direct mode literally does not
+use az/el/layout/srcFormat, so adding those fields now would be schema
+churn with no behaviour behind it. M2's `Track`/`Piece` carry exactly what
+direct mode needs; M3 adds a schema migration (v1→v2) alongside the spatial
+math that gives the new fields meaning, which is also the first *real* test
+of the migration mechanism built in M2 (see below).
+
+- [x] `mc_core` data model: `Track`, `Piece`, `Playlist`/`PlaylistSettings`;
+      JSON (de)serialisation (`PlaylistIO`, nlohmann-json) with
+      `schemaVersion` + a migration-step scaffold (empty today, exercised for
+      real at M3's v1→v2 migration).
+- [x] Mixer per piece: fader/mute/solo per track (UI + `RealtimeAudioEngine`
+      wiring, live while playing), piece trim, master fader + per-track and
+      per-output peak meters. Peak-hold is UI-side decay (`0.97` per tick),
+      matching how the reference itself does peak-hold at its UI layer, not
+      inside the audio synth.
+- [x] Transport UI: play/pause/stop/prev/next, draggable position bar,
+      auto-advance with a configurable gap. **Crossfade between pieces is
+      not implemented** — auto-advance still only gaps, same as the
+      reference; fixing that (project brief §5) is still open, carried
+      forward below rather than silently dropped.
+- [x] Playlist editing: add files/folder/folder-of-many-pieces, reorder,
+      duplicate, remove, rename (title field), missing-file marking in the
+      list. "+ Tracks..." appends to the selected piece (blocked while that
+      piece is the one currently loaded, matching the reference).
+- [x] Autosave: `AutosaveScheduler` (debounced ~1 s after the last edit, unit
+      tested with a fake clock) writes to the current playlist path on a
+      30 fps UI timer tick. Crash recovery is implicit rather than a
+      separate flow: the app always opens whatever
+      `~/Library/Application Support/MultiCue Project/MultiCue/Autosave.mcplist`
+      (or platform equivalent) last had on disk, same mechanism the
+      reference uses.
+- [x] Natural-sort file ordering (`mc_core::naturalSortKey()`), plus
+      `guessPieceTitle()` and `expandTracksFromProbedFiles()` (both ported
+      from the reference and unit tested) wired into the actual add-files/
+      add-folder/add-many-folders flows.
+- [ ] Source-format auto-detection: deliberately deferred to M3 (see above).
+- [x] Playlist round-trip + rejection tests (bad magic, missing/too-new
+      schema version), 24 new tests across `mc_core`/`mc_engine` this
+      milestone (65 total). README/CHANGELOG updated.
+
+**Found and fixed during this milestone, before any of it shipped:**
+- `PieceMixer`'s gain matrix was originally going to be an
+  `std::atomic<std::shared_ptr<const GainMatrix>>` swap (the "obvious"
+  C++20 way to do this) -- it does not actually compile under Apple's
+  libc++, confirmed by compiling a two-line reproduction before writing 70
+  lines of code around a design that would never build. Replaced with a
+  flat `std::vector<std::atomic<float>>`, one genuinely lock-free cell per
+  source×output pair, needed anyway for the UI's live "-> out N" per-track
+  reassignment control.
+- `RealtimeAudioEngine::stop()` blocked the calling thread for up to 500 ms
+  waiting out the release fade -- fine for the M1 CLI, but would have
+  frozen the GUI's Stop button for that long on every press. Split into a
+  non-blocking `requestStop()` + `isStopFadeComplete()` pair that the UI's
+  existing poll timer drives (mirroring how auto-advance's gap countdown
+  already worked), keeping the blocking `stop()` only for the CLI's
+  synchronous convenience.
+- The gap countdown's first implementation measured elapsed time with a
+  function-local `static` "last tick" variable that was only ever
+  initialized once for the process's whole lifetime, not reset per gap --
+  so every gap after the first would have read a stale timestamp and fired
+  instantly. Fixed by computing an absolute deadline once when the gap
+  begins and comparing against "now" every tick, which has no
+  accumulation/staleness failure mode to get wrong.
+- `QScrollArea::setWidget()`'s ownership of the widget it replaces was not
+  something to guess at from memory; `takeWidget()` + explicit
+  `deleteLater()` before every `setWidget()` call removes the ambiguity
+  entirely regardless of the actual Qt6 behaviour.
 
 ## M3 — Spatial
 
@@ -332,10 +385,9 @@ Goal: every listening format from the reference, plus the fixes from §5.
 - **Master limiter is sample-peak, not true-peak.** Deliberate M1 scope cut
   (see M1's note above) — upgrade at M4 alongside `mc_dsp::Bs1770Meter`,
   sharing one oversampling implementation instead of writing it twice.
-- **No automatic reconnect or UI message when `deviceWasLost()` fires.** The
-  detection is real (RtAudio's error callback → an atomic flag, verified not
-  to allocate), but nothing consumes it yet because there is no transport UI
-  to show a message in. Wire this up once M2's playlist UI exists.
+- **Still no automatic reconnect or UI message when `deviceWasLost()` fires,
+  even though M2's transport UI now exists.** Carried forward again rather
+  than silently dropped — the M2 UI work didn't get to it; genuinely next.
 - **Windows has not run the engine at all.** Everything in M1 was built,
   tested (including under ASan/UBSan), and run against real audio hardware
   only on macOS (the only machine available in this environment). The CI
@@ -343,12 +395,13 @@ Goal: every listening format from the reference, plus the fixes from §5.
   WASAPI backend, MSVC warnings-as-errors, or the vcpkg Windows triplet
   actually work until that CI run happens (see the M0 CI item above, which
   this depends on).
-- **Clang RealtimeSanitizer was not attempted on the audio callback.** ASan/
-  UBSan were run (clean, including live hardware); RealtimeSanitizer
-  specifically checks for allocation/syscalls/locks *inside* the callback,
-  which is a stronger, more targeted check the brief explicitly asks for
-  (§7). Not done this milestone — try it at the start of M2 before more code
-  accumulates in the callback path.
+- **Clang RealtimeSanitizer was not attempted on the audio callback.** Said
+  at the end of M1 this would happen "at the start of M2" and it didn't --
+  logged here again rather than quietly re-deferred a second time. ASan/
+  UBSan were run (clean, including live hardware) and cover a lot of the
+  same ground, but RealtimeSanitizer's allocation/syscall/lock checks
+  *inside* the callback are a more targeted signal the brief explicitly
+  asks for (§7).
 - **`RealtimeAudioEngine`'s pause/resume/seek paths are verified by one
   manual scripted run against real hardware** (`multicue-cli play`'s
   built-in pause→resume→seek sequence, positions checked by eye against the
@@ -356,3 +409,21 @@ Goal: every listening format from the reference, plus the fixes from §5.
   isn't available/deterministic in CI, so an automated equivalent (if one is
   worth building) would need to mock the device layer, which hasn't been
   attempted yet.
+- **No crossfade between pieces on auto-advance.** Project brief §5
+  explicitly lists this as a reference limitation to fix; M2 only ported the
+  reference's gap behaviour, not the fix. Open.
+- **The M2 playlist/mixer UI (`MainWindow`) has no automated test
+  coverage.** It was built, then manually re-read end to end looking for
+  bugs (three were found and fixed this way: the gain-matrix thread-safety
+  issue, the blocking Stop button, and a stale-timestamp bug in the gap
+  countdown — see M2's "found and fixed" list above), and launched to
+  confirm it starts/stops cleanly. It was not exercised by clicking through
+  it by hand, and there is no automated UI test (Qt's private-slot methods
+  are reachable via `QMetaObject::invokeMethod` for this kind of testing,
+  but the file-picker dialogs in the way of the add-piece flows make that
+  nontrivial; not attempted this milestone).
+- **Scrubbing the position bar while fully stopped doesn't stick.** Dragging
+  it updates the displayed value but the next Play still starts from 0,
+  since nothing currently remembers "seek to here" independent of an
+  active/paused engine session. The reference keeps this working while
+  stopped; minor, not fixed yet.

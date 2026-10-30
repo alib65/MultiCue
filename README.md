@@ -9,29 +9,35 @@ synchronized video. "MultiCue" is a working name.
 
 It is free software, licensed GPL-3.0-or-later.
 
-The project is pre-alpha: milestones **M0 (skeleton)** and **M1 (engine
-core)** are substantially complete on macOS (see `docs/ROADMAP.md` for the
-exact checklist, including what is *not* yet verified -- notably Windows and
-Linux, which have not run at all in this environment). `docs/ARCHITECTURE.md`
-has the design.
+The project is pre-alpha: milestones **M0 (skeleton)**, **M1 (engine core)**
+and **M2 (playlist mode)** are substantially complete on macOS (see
+`docs/ROADMAP.md` for the exact checklist, including what is *not* yet
+verified -- notably Windows and Linux, which have not run at all in this
+environment, and the playlist UI, which has no automated test coverage).
+`docs/ARCHITECTURE.md` has the design.
 
 ## Status right now
 
-- `mc_core`: application identity constants (`AppInfo.h`), a `versionString()`
-  helper. The show-file data model arrives in M2.
+- `mc_core`: application identity constants; the playlist data model
+  (`Track`, `Piece`, `Playlist`), JSON persistence with a schema-version +
+  migration scaffold, natural-sort file ordering, autosave scheduling. The
+  full cue-list show file arrives in M5.
 - `mc_engine`: device enumeration; disk streaming (`Voice`, lock-free
   `RingBuffer`, on-the-fly resampling that is bypassed entirely when rates
   match, so direct mode is bit-exact); a direct-mode routing matrix
-  (`GainMatrix`); click-free fades (`Envelope`) for start/stop and for
-  pause/resume/seek; a lookahead master limiter (`MasterLimiter`, sample-peak
-  for now -- true peak arrives at M4, see `docs/ROADMAP.md`); the shared
-  mixing core used by both the realtime engine and the offline renderer
-  (`PieceMixer`); and `RealtimeAudioEngine` (live load/play/pause/stop/seek
-  against a real audio device, with device-loss detection). The cue runtime
-  and spatial/listening-format math arrive in M3/M5.
-- `multicue`: a Qt 6 Widgets window, dark by default, to pick a device/
-  channel and play a test tone (M0's slice; M2 adds the real playlist mixer
-  wired to `RealtimeAudioEngine`).
+  (`GainMatrix`) with live per-track output reassignment; click-free fades
+  (`Envelope`) for start/stop and for pause/resume/seek; a lookahead master
+  limiter (`MasterLimiter`, sample-peak for now -- true peak arrives at M4);
+  per-track/per-output peak+RMS metering; the shared mixing core used by
+  both the realtime engine and the offline renderer (`PieceMixer`); and
+  `RealtimeAudioEngine` (live load/play/pause/stop/seek against a real audio
+  device, with device-loss detection). The cue runtime and spatial/
+  listening-format math arrive in M3/M5.
+- `multicue`: a Qt 6 Widgets Playlist-mode window, dark by default -- add
+  pieces from files/folders, reorder/duplicate/remove, a per-piece mixer
+  (fader/mute/solo/output-routing per track, live while playing), transport
+  with a draggable position bar and auto-advance, master fader + limiter,
+  level meters, autosave, open/save-as.
 - `multicue-cli`: `list-devices`, `version`, `render` (direct-mode offline
   mix to a WAV file), `play` (live playback for manual testing, including a
   built-in pause/resume/seek sequence).
