@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+
 #include "mc/core/PlaylistIO.h"
 
 using namespace mc::core;
@@ -84,7 +86,7 @@ TEST_CASE("deserializePlaylist rejects a schema version newer than this build un
 
 TEST_CASE("Save/load round-trip through a real file", "[core][playlistio]") {
     const auto original = makeSamplePlaylist();
-    const std::string path = "/tmp/mc_core_test_playlist.mcplist";
+    const std::string path = (std::filesystem::temp_directory_path() / "mc_core_test_playlist.mcplist").string();
     std::string error;
     REQUIRE(savePlaylistToFile(original, path, error));
 
