@@ -42,7 +42,21 @@ public:
 
     void play();
     void pause();
+
+    // Blocking convenience for scripts/CLI use: triggers the release fade
+    // and waits (up to ~500 ms) for it to finish before unloading. Never
+    // call this from a UI thread that must stay responsive -- use
+    // requestStop()/isStopFadeComplete() instead (see below).
     void stop();
+
+    // Non-blocking stop, split in two so a UI can drive it from its own
+    // poll timer instead of freezing on a sleep loop: requestStop()
+    // triggers the same release fade as stop() and returns immediately;
+    // the caller polls isStopFadeComplete() and calls unload() once it
+    // reports true (or just calls stop() if blocking is acceptable).
+    void requestStop();
+    bool isStopFadeComplete() const noexcept;
+
     void seek(double seconds);
 
     bool isLoaded() const noexcept;

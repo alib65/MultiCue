@@ -15,6 +15,9 @@ add_library(mc_engine STATIC
   src/Voice.cpp
   src/RealtimeAudioEngine.cpp
   src/AudioFileProbe.cpp
+  src/SpatialRenderer.cpp
+  src/SpatialLayout.cpp
+  src/BinauralStage.cpp
 )
 
 target_include_directories(mc_engine PUBLIC
@@ -22,7 +25,7 @@ target_include_directories(mc_engine PUBLIC
 )
 
 target_link_libraries(mc_engine
-  PUBLIC mc_core Threads::Threads multicue_sanitizers
+  PUBLIC mc_core mc_dsp Threads::Threads multicue_sanitizers
   PRIVATE RtAudioPortable::rtaudio SndFilePortable::sndfile SampleRatePortable::samplerate multicue_warnings
 )
 

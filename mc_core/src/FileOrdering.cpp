@@ -1,6 +1,7 @@
 #include "mc/core/FileOrdering.h"
 
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 
 namespace mc::core {
@@ -60,6 +61,43 @@ std::string guessPieceTitle(const std::vector<std::string>& paths) {
         return prefix;
     }
     return std::filesystem::path(paths[0]).parent_path().filename().string();
+}
+
+namespace {
+bool containsAny(const std::string& haystack, const std::vector<std::string>& needles) {
+    for (const auto& n : needles) {
+        if (haystack.find(n) != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+bool isPerfectSquare(int n) {
+    const int r = static_cast<int>(std::lround(std::sqrt(static_cast<double>(n))));
+    return r * r == n;
+}
+} // namespace
+
+SourceDetectionResult detectSourceFormat(const std::vector<std::string>& filenames, int trackCount) {
+    std::string joined;
+    for (const auto& f : filenames) {
+        std::string lower = f;
+        for (char& c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        joined += lower;
+        joined += ' ';
+    }
+    const bool sq = isPerfectSquare(trackCount);
+
+    SourceDetectionResult result;
+    if (sq && trackCount >= 4 && trackCount <= 16 && containsAny(joined, {"fuma", "bformat", "b-format", "wxyz"})) {
+        result.format = SourceFormat::Fuma;
+    } else if (sq && trackCount >= 4 && containsAny(joined, {"ambix", "acn", "hoa", "foa", "ambisonic"})) {
+        result.format = SourceFormat::AmbiX;
+    } else {
+        result.format = SourceFormat::Multi;
+    }
+    result.layoutIdx = (trackCount == 2 || joined.find("lfe") != std::string::npos) ? 3 : 0;
+    return result;
 }
 
 std::vector<Track> expandTracksFromProbedFiles(const std::vector<ProbedFile>& files, int startOutputChannel) {

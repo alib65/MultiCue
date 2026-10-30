@@ -13,6 +13,19 @@ namespace mc::core {
 namespace {
 using json = nlohmann::json;
 
+std::string srcFormatToString(SourceFormat f) {
+    switch (f) {
+        case SourceFormat::AmbiX: return "ambix";
+        case SourceFormat::Fuma: return "fuma";
+        case SourceFormat::Multi: default: return "multi";
+    }
+}
+SourceFormat srcFormatFromString(const std::string& s) {
+    if (s == "ambix") return SourceFormat::AmbiX;
+    if (s == "fuma") return SourceFormat::Fuma;
+    return SourceFormat::Multi;
+}
+
 json trackToJson(const Track& t) {
     return json{
         {"path", t.path},
@@ -24,6 +37,9 @@ json trackToJson(const Track& t) {
         {"gainDb", t.gainDb},
         {"mute", t.mute},
         {"solo", t.solo},
+        {"azimuthDeg", t.azimuthDeg},
+        {"elevationDeg", t.elevationDeg},
+        {"lfe", t.lfe},
     };
 }
 
@@ -38,6 +54,9 @@ Track trackFromJson(const json& j) {
     t.gainDb = j.value("gainDb", 0.0f);
     t.mute = j.value("mute", false);
     t.solo = j.value("solo", false);
+    t.azimuthDeg = j.value("azimuthDeg", 0.0);
+    t.elevationDeg = j.value("elevationDeg", 0.0);
+    t.lfe = j.value("lfe", false);
     return t;
 }
 
@@ -49,6 +68,8 @@ json pieceToJson(const Piece& p) {
     return json{
         {"title", p.title},
         {"trimDb", p.trimDb},
+        {"srcFormat", srcFormatToString(p.srcFormat)},
+        {"layoutIdx", p.layoutIdx},
         {"tracks", tracks},
     };
 }
@@ -57,6 +78,8 @@ Piece pieceFromJson(const json& j) {
     Piece p;
     p.title = j.value("title", std::string("Untitled"));
     p.trimDb = j.value("trimDb", 0.0f);
+    p.srcFormat = srcFormatFromString(j.value("srcFormat", std::string("multi")));
+    p.layoutIdx = j.value("layoutIdx", 0);
     if (j.contains("tracks") && j["tracks"].is_array()) {
         for (const auto& tj : j["tracks"]) {
             p.tracks.push_back(trackFromJson(tj));
@@ -66,11 +89,44 @@ Piece pieceFromJson(const json& j) {
 }
 
 // Each entry migrates a document *in place* from schema version N to N+1.
-// Index 0 migrates v1->v2, etc. Empty today (v1 is the only version); this
-// exists so adding v2 later is "append one function", not "invent the
-// migration mechanism under deadline" (docs/ARCHITECTURE.md §6.1).
+// Index 0 migrates v1->v2.
 const std::vector<std::function<void(json&)>>& migrationSteps() {
-    static const std::vector<std::function<void(json&)>> steps;
+    static const std::vector<std::function<void(json&)>> steps = {
+        // v1 -> v2: v1 pieces/tracks have no spatial fields at all. Rather
+        // than leaving every migrated piece at the blanket layoutIdx-0
+        // default, apply the same track-count heuristic the reference uses
+        // when it first assigns a layout to a piece (2 tracks -> the
+        // "Standard" stereo preset, everything else -> ring-from-front-left)
+        // -- a real, version-specific transformation, not just a missing-key
+        // default. Per-track azimuth/elevation are left at 0/0 here; filling
+        // them in from the chosen layout preset needs mc_dsp, which mc_core
+        // intentionally does not depend on (docs/ARCHITECTURE.md §2) -- that
+        // step happens once, at load time, in mc_engine/the app, mirroring
+        // where the reference itself does it.
+        [](json& doc) {
+            if (!doc.contains("pieces") || !doc["pieces"].is_array()) {
+                return;
+            }
+            for (auto& pieceJson : doc["pieces"]) {
+                if (!pieceJson.contains("srcFormat")) {
+                    pieceJson["srcFormat"] = "multi";
+                }
+                if (!pieceJson.contains("layoutIdx")) {
+                    const auto numTracks = pieceJson.contains("tracks") && pieceJson["tracks"].is_array()
+                        ? pieceJson["tracks"].size()
+                        : 0;
+                    pieceJson["layoutIdx"] = (numTracks == 2) ? 3 : 0; // Standard vs. ring-front-left
+                }
+                if (pieceJson.contains("tracks") && pieceJson["tracks"].is_array()) {
+                    for (auto& trackJson : pieceJson["tracks"]) {
+                        if (!trackJson.contains("azimuthDeg")) trackJson["azimuthDeg"] = 0.0;
+                        if (!trackJson.contains("elevationDeg")) trackJson["elevationDeg"] = 0.0;
+                        if (!trackJson.contains("lfe")) trackJson["lfe"] = false;
+                    }
+                }
+            }
+        },
+    };
     return steps;
 }
 

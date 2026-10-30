@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "mc/core/Piece.h"
 #include "mc/core/Track.h"
 
 namespace mc::core {
@@ -36,5 +37,18 @@ std::vector<Track> expandTracksFromProbedFiles(const std::vector<ProbedFile>& fi
 // to the containing folder's name -- ported from the reference's
 // `guessTitle`.
 std::string guessPieceTitle(const std::vector<std::string>& paths);
+
+struct SourceDetectionResult {
+    SourceFormat format = SourceFormat::Multi;
+    int layoutIdx = 0; // mc::dsp::Layout numbering; meaningful only for SourceFormat::Multi
+};
+
+// Guesses a piece's source format and initial layout from its file names
+// and track count -- ported from the reference's `detectSource`. Pure
+// string logic: mc_core does not depend on mc_dsp
+// (docs/ARCHITECTURE.md §2), so this only picks *which* layout preset
+// index to use -- turning that into actual per-track azimuth/elevation
+// values is the caller's job (mc_engine has both mc_core and mc_dsp).
+SourceDetectionResult detectSourceFormat(const std::vector<std::string>& filenames, int trackCount);
 
 } // namespace mc::core

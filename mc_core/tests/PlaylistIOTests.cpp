@@ -93,6 +93,58 @@ TEST_CASE("Save/load round-trip through a real file", "[core][playlistio]") {
     REQUIRE(loaded.playlist.pieces.size() == 2);
 }
 
+TEST_CASE("A v1 document migrates to v2 with the layout heuristic, not just blanket defaults", "[core][playlistio]") {
+    // Two tracks -> the "Standard" stereo preset (layoutIdx 3), matching
+    // the reference's own behaviour when it first assigns a layout.
+    const auto stereoDoc = R"({
+        "format": "MultiCue-Playlist", "schemaVersion": 1,
+        "settings": {"autoAdvance": true, "gapSeconds": 3.0},
+        "pieces": [{"title": "Old Stereo Piece", "trimDb": 0.0,
+            "tracks": [{"path": "/a.wav"}, {"path": "/b.wav"}]}]
+    })";
+    const auto stereoResult = deserializePlaylist(stereoDoc);
+    REQUIRE(stereoResult.success);
+    REQUIRE(stereoResult.playlist.pieces[0].layoutIdx == 3);
+    REQUIRE(stereoResult.playlist.pieces[0].srcFormat == SourceFormat::Multi);
+    REQUIRE(stereoResult.playlist.pieces[0].tracks[0].azimuthDeg == 0.0);
+    REQUIRE(stereoResult.playlist.pieces[0].tracks[0].lfe == false);
+
+    // Four tracks -> ring-from-front-left (layoutIdx 0).
+    const auto quadDoc = R"({
+        "format": "MultiCue-Playlist", "schemaVersion": 1,
+        "settings": {"autoAdvance": true, "gapSeconds": 3.0},
+        "pieces": [{"title": "Old Quad Piece", "trimDb": 0.0,
+            "tracks": [{"path": "/a.wav"}, {"path": "/b.wav"}, {"path": "/c.wav"}, {"path": "/d.wav"}]}]
+    })";
+    const auto quadResult = deserializePlaylist(quadDoc);
+    REQUIRE(quadResult.success);
+    REQUIRE(quadResult.playlist.pieces[0].layoutIdx == 0);
+}
+
+TEST_CASE("A v2 document's spatial fields round-trip exactly", "[core][playlistio]") {
+    Playlist pl;
+    Piece p;
+    p.title = "Spatial Piece";
+    p.srcFormat = SourceFormat::AmbiX;
+    p.layoutIdx = -1;
+    Track t;
+    t.path = "/a.wav";
+    t.azimuthDeg = 45.0;
+    t.elevationDeg = -20.0;
+    t.lfe = true;
+    p.tracks.push_back(t);
+    pl.pieces.push_back(p);
+
+    const auto json = serializePlaylist(pl);
+    const auto result = deserializePlaylist(json);
+    REQUIRE(result.success);
+    REQUIRE(result.playlist.pieces[0].srcFormat == SourceFormat::AmbiX);
+    REQUIRE(result.playlist.pieces[0].layoutIdx == -1);
+    REQUIRE(result.playlist.pieces[0].tracks[0].azimuthDeg == 45.0);
+    REQUIRE(result.playlist.pieces[0].tracks[0].elevationDeg == -20.0);
+    REQUIRE(result.playlist.pieces[0].tracks[0].lfe == true);
+}
+
 TEST_CASE("loadPlaylistFromFile reports an error for a missing file", "[core][playlistio]") {
     const auto result = loadPlaylistFromFile("/no/such/playlist.mcplist");
     REQUIRE_FALSE(result.success);

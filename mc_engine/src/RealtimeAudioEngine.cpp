@@ -285,9 +285,9 @@ void RealtimeAudioEngine::pause() {
     impl_->wantActive.store(false, std::memory_order_release);
 }
 
-void RealtimeAudioEngine::stop() {
+void RealtimeAudioEngine::requestStop() {
     if (!impl_->mixer || !everStarted_) {
-        unload();
+        impl_->stoppedFlag.store(true, std::memory_order_relaxed); // nothing to fade
         return;
     }
     // Make sure the transport gain is settled at 1 so the audible fade the
@@ -298,9 +298,16 @@ void RealtimeAudioEngine::stop() {
     impl_->mixer->stop();
     impl_->stoppedFlag.store(false, std::memory_order_relaxed);
     impl_->stopRequested.store(true, std::memory_order_release);
+}
 
+bool RealtimeAudioEngine::isStopFadeComplete() const noexcept {
+    return impl_->stoppedFlag.load(std::memory_order_acquire);
+}
+
+void RealtimeAudioEngine::stop() {
+    requestStop();
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-    while (!impl_->stoppedFlag.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline) {
+    while (!isStopFadeComplete() && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
     unload();

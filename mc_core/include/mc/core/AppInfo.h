@@ -17,6 +17,10 @@ inline constexpr int kShowFileSchemaVersion = 1;
 // cue-free shape -- ahead of the full Show file (M5's cue lists). See
 // docs/ARCHITECTURE.md §6.2.
 inline constexpr std::string_view kPlaylistFileMagic = "MultiCue-Playlist";
-inline constexpr int kPlaylistSchemaVersion = 1;
+// v1: title/trimDb/tracks (path/channel/fileInfo/outputChannel/gainDb/mute/
+//     solo) only -- direct mode, no spatial fields.
+// v2: adds Piece::srcFormat/layoutIdx and Track::azimuthDeg/elevationDeg/lfe
+//     for the M3 listening-format renderer (docs/ARCHITECTURE.md §4).
+inline constexpr int kPlaylistSchemaVersion = 2;
 
 } // namespace mc::core

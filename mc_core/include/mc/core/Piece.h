@@ -7,15 +7,26 @@
 
 namespace mc::core {
 
+// What the piece's files actually are, per docs/ARCHITECTURE.md §4.1.
+// Added in schema v2 alongside listening-format rendering.
+enum class SourceFormat {
+    Multi, // speaker feeds, placed via each track's azimuthDeg/elevationDeg
+    AmbiX, // ACN/SN3D, track i is Ambisonic channel i
+    Fuma,  // Furse-Malham order/weighting, converted to AmbiX internally
+};
+
 // A piece is one or more mono tracks played together, sample-locked
-// (docs/ARCHITECTURE.md §3.6). Source format and spatial layout (AmbiX,
-// FuMa, az/el per track) are added at M3 alongside the spatial math that
-// gives them meaning; M2 is direct mode only, so a Piece is just tracks and
-// a trim.
+// (docs/ARCHITECTURE.md §3.6).
 struct Piece {
     std::string title;
     float trimDb = 0.0f;
     std::vector<Track> tracks;
+
+    SourceFormat srcFormat = SourceFormat::Multi;
+    // Layout preset index for Multi pieces, matching mc::dsp::Layout's
+    // numbering (-1 = custom angles, not a preset). Irrelevant for AmbiX/
+    // FuMa pieces.
+    int layoutIdx = 0;
 };
 
 // Longest track in the piece, matching the reference's pieceSecs (the piece

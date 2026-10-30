@@ -17,6 +17,17 @@ struct Track {
     float gainDb = 0.0f;
     bool mute = false;
     bool solo = false;
+
+    // Spatial position, meaningful only when the piece's source format is
+    // Multi (speaker feed): azimuth 0 = front, +90 = left, -90 = right,
+    // 180 = back; elevation 0 = ear height, +90 = straight up. Added in
+    // schema v2 alongside the listening-format renderer
+    // (docs/ARCHITECTURE.md §0/§4). Ignored (and not meaningful) for AmbiX/
+    // FuMa tracks, whose spatial meaning comes from their ACN channel
+    // index instead -- see SourceFormat below.
+    double azimuthDeg = 0.0;
+    double elevationDeg = 0.0;
+    bool lfe = false; // low-frequency/subwoofer channel: not placed in space
 };
 
 } // namespace mc::core

@@ -66,3 +66,34 @@ TEST_CASE("guessPieceTitle falls back to the folder name when there is no usable
 TEST_CASE("guessPieceTitle on an empty list returns a placeholder, not a crash", "[core][fileordering]") {
     REQUIRE(guessPieceTitle({}) == "Untitled");
 }
+
+TEST_CASE("detectSourceFormat recognises AmbiX from the filename", "[core][fileordering]") {
+    auto r = detectSourceFormat({"piece_ambix.wav"}, 9);
+    REQUIRE(r.format == SourceFormat::AmbiX);
+}
+
+TEST_CASE("detectSourceFormat recognises FuMa from the filename", "[core][fileordering]") {
+    auto r = detectSourceFormat({"piece_bformat.wav"}, 4);
+    REQUIRE(r.format == SourceFormat::Fuma);
+}
+
+TEST_CASE("detectSourceFormat requires a perfect-square track count for Ambisonic formats", "[core][fileordering]") {
+    auto r = detectSourceFormat({"piece_ambix.wav"}, 5); // not 4/9/16/25/36
+    REQUIRE(r.format == SourceFormat::Multi);
+}
+
+TEST_CASE("detectSourceFormat defaults to Multi with no recognisable keyword", "[core][fileordering]") {
+    auto r = detectSourceFormat({"song_L.wav", "song_R.wav"}, 2);
+    REQUIRE(r.format == SourceFormat::Multi);
+    REQUIRE(r.layoutIdx == 3); // 2 tracks -> Standard (stereo)
+}
+
+TEST_CASE("detectSourceFormat picks ring-front-left for anything else", "[core][fileordering]") {
+    auto r = detectSourceFormat({"piece_1.wav", "piece_2.wav", "piece_3.wav"}, 3);
+    REQUIRE(r.layoutIdx == 0);
+}
+
+TEST_CASE("detectSourceFormat picks Standard layout when a filename mentions LFE", "[core][fileordering]") {
+    auto r = detectSourceFormat({"a.wav", "b.wav", "c_lfe.wav"}, 3);
+    REQUIRE(r.layoutIdx == 3);
+}
