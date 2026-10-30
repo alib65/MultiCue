@@ -6,7 +6,7 @@
     {
       "name": "rtaudio",
       "platform": "linux",
-      "features": ["alsa", "pulse"]
+      "features": ["alsa"]
     },
     {
       "name": "rtaudio",
