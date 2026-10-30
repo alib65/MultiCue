@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -28,6 +30,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libpulse-dev
+
+      # vcpkg's default binary-cache location per OS; ffmpeg alone takes
+      # 20-40 min to build from source, so without this every run rebuilds
+      # the whole manifest from scratch.
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ~/AppData/Local/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
 
       # jurplel/install-qt-action wraps aqtinstall and resolves the
       # per-OS/per-arch Qt install directory for us, exporting it as the
@@ -82,6 +95,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libpulse-dev
 
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ~/AppData/Local/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -105,3 +126,113 @@ jobs:
       - name: Test under ASan/UBSan
         working-directory: build
         run: ctest --output-on-failure --build-config Debug
+
+  package:
+    # Only on version tags -- a Debug matrix build already runs on every
+    # push/PR above; this job produces the user-facing installer/AppImage
+    # and attaches it to the GitHub Release for that tag.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            triplet: x64-windows
+          - os: ubuntu-latest
+            triplet: x64-linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux system audio headers + AppImage runtime deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libpulse-dev libfuse2
+
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/vcpkg/archives
+            ~/AppData/Local/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.3'
+          cache: true
+
+      - name: Configure (CMake + vcpkg manifest, Release)
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
+            -DQt6_DIR="$Qt6_DIR" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMULTICUE_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      # VCPKG_APPLOCAL_DEPS (on by default under the vcpkg toolchain) already
+      # copied every vcpkg-built DLL next to multicue.exe post-build; the one
+      # thing left is Qt's own DLLs + platform plugin, which windeployqt
+      # knows how to find relative to its own install (not under vcpkg).
+      - name: Package (Windows, windeployqt + zip)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          QT_BIN="$(dirname "$(dirname "$(dirname "$Qt6_DIR")")")/bin"
+          "$QT_BIN/windeployqt.exe" --release build/apps/multicue/Release/multicue.exe
+          mkdir -p dist
+          cp -r build/apps/multicue/Release "dist/MultiCue"
+          cd dist && 7z a -tzip "../MultiCue-windows-x64.zip" "MultiCue"
+
+      # Static vcpkg linkage on Linux (x64-linux triplet) means ffmpeg/
+      # rtaudio/sndfile/samplerate are already inside the binary -- only Qt
+      # and its plugins need bundling, which linuxdeploy-plugin-qt handles.
+      - name: Package (Linux, linuxdeploy AppImage)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          wget -q -O linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q -O linuxdeploy-plugin-qt-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+
+          mkdir -p AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cp apps/multicue/resources/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/multicue.png
+          cat > AppDir/usr/share/applications/multicue.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=MultiCue
+          Exec=multicue
+          Icon=multicue
+          Categories=AudioVideo;
+          EOF
+
+          QT_BIN="$(dirname "$(dirname "$(dirname "$Qt6_DIR")")")/bin"
+          export QMAKE="$QT_BIN/qmake6"
+          export PATH="$QT_BIN:$PATH"
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
+            --appdir AppDir \
+            -e build/apps/multicue/multicue \
+            -d AppDir/usr/share/applications/multicue.desktop \
+            -i AppDir/usr/share/icons/hicolor/256x256/apps/multicue.png \
+            --plugin qt \
+            --output appimage
+          mv MultiCue*.AppImage MultiCue-linux-x86_64.AppImage
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MultiCue-*

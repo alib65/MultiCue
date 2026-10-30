@@ -15,6 +15,11 @@
     "catch2",
     "libsndfile",
     "libsamplerate",
-    "nlohmann-json"
+    "nlohmann-json",
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": ["avcodec", "avformat", "swscale"]
+    }
   ]
 }
