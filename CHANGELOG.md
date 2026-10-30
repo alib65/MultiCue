@@ -2,7 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased] -- M2 playlist mode
+## [Unreleased] -- M3 spatial math core (partial milestone)
+
+### Added
+- `mc_dsp` (created now, deferred from M0 as planned): spherical harmonics
+  (ACN/SN3D, order 0-7), max-rE weights, Fibonacci-sphere sampling, layout
+  presets (ring x2, pairs, ITU standard incl. a 7.1.4 extension, two rings,
+  dome, sphere, custom), VBAP with imaginary speakers, AllRAD + 2D max-rE
+  Ambisonic decoders, constant-power stereo downmix, FuMa<->AmbiX channel
+  table, and the spherical-head binaural fallback model's filter
+  coefficients -- all ported from the reference implementation
+  (docs/ARCHITECTURE.md §0).
+- 57 new test cases / 72,597 new assertions (122 test cases total project-
+  wide), including convention-independent correctness checks (energy/
+  Parseval identities, directional-correctness checks on the decoders, ITD
+  sign/symmetry on the HRTF model) rather than just round-tripping each
+  function against its own output.
+- Full project test suite re-verified clean under
+  `-DMULTICUE_ENABLE_ASAN=ON` after adding this (array-index-heavy) code.
+
+### Known gaps -- this is a partial milestone, logged as such
+- None of this math is wired into the running app yet: no live listening-
+  format switch, no My Speakers editor, no binaural audio renderer, no
+  B-format output, no SOFA loading, no distance compensation, no map view.
+  See docs/ROADMAP.md's M3 section for the itemised remainder.
+- Source-format auto-detection (deferred from M2) is still deferred.
+
+## M2 playlist mode
 
 ### Added
 - `mc_core` playlist data model (`Track`, `Piece`, `Playlist`), JSON

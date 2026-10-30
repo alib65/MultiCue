@@ -248,34 +248,76 @@ of the migration mechanism built in M2 (see below).
 
 Goal: every listening format from the reference, plus the fixes from §5.
 
-- [ ] `mc_dsp`: spherical harmonics (ACN/SN3D, order 1–7), max-rE weights,
-      Fibonacci-sphere sampling — unit tested against closed-form values.
-- [ ] Layout presets (ring ×2, pairs, ITU standard incl. 7.1.4, two rings,
-      dome, sphere, custom) — unit tested against hand-computed angles.
+**Status: the `mc_dsp` math core is done and thoroughly tested; wiring it
+into the live engine, the UI (My Speakers editor, source-format dropdown,
+map view), and binaural/SOFA are not.** Logged as a partial milestone
+rather than claimed as finished — the math is the hard, failure-prone part
+of M3 and is now solid; everything below it that turns the math into an
+actual listening-format switch in the running app is still open work.
+
+- [x] `mc_dsp` created (deferred from M0 as planned — see that milestone's
+      note). Spherical harmonics (ACN/SN3D, order 0–7), max-rE weights,
+      Fibonacci-sphere sampling — unit tested, including a convention-
+      independent Parseval/energy check, not just spot values.
+- [x] Layout presets (ring ×2, pairs, ITU standard incl. a 7.1.4 extension
+      beyond the reference's 7.1 ceiling, two rings, dome, sphere, custom)
+      — unit tested against the reference's own documented angle comments
+      (e.g. "8 tracks: 22.5°, −22.5°, −67.5° …"), not just round-tripped
+      against the port's own output.
+- [x] VBAP with imaginary speakers (convex hull + 70°-threshold candidate
+      directions) — tested: unity gain exactly at a real speaker, unit
+      power after renormalisation across a direction grid, energy leaking
+      to imaginary speakers (pre-renorm) in a layout gap, all gains
+      non-negative.
+- [x] AllRAD (3D layouts, falls back to the 2D decoder for flat layouts)
+      and the 2D max-rE decoder (horizontal layouts) — tested for energy
+      normalisation *and* directional correctness (a front-encoded source
+      decodes louder to the front speakers than the rear ones; a
+      top-encoded source decodes loudest to an actual overhead speaker).
+- [x] Stereo downmix (constant-power, rear fold) — ported formula, unit
+      tested against the reference's own documented behaviour (full pan at
+      ±30°, symmetric fold for sources directly behind, mirror symmetry
+      left/right).
+- [x] FuMa↔AmbiX channel/gain table, unit tested (every one of the 16
+      FuMa channels up to 3rd order maps to a distinct ACN index with
+      positive gain; out-of-range indices rejected, not crashed).
+- [x] Binaural fallback model: spherical head (Brown & Duda) ITD + per-ear
+      shadow filter + shared front/back shelf, ported as pure coefficient
+      computation (`sphericalHeadHrtfCoeffs`) — tested for ITD sign/
+      symmetry (a source on the left arrives at the left ear first, left/
+      right are exact mirror images) and coefficient finiteness across the
+      sphere. **Not yet an actual audio filter** — applying these
+      coefficients in a real-time binaural renderer is still open, as is
+      everything else in this section below.
 - [ ] "My speakers" editor + speaker layout file format
       (`docs/ARCHITECTURE.md` §6.3), independent of the show file.
 - [ ] Distance compensation: per-output delay + gain, manual override (new
       vs. reference, §5).
-- [ ] VBAP with imaginary speakers (convex hull + 70°-threshold candidate
-      directions, ported from the reference) — gain-sum/energy tests.
-- [ ] AllRAD (3D layouts) and 2D max-rE decoder (horizontal layouts) —
-      energy-normalisation tests.
-- [ ] Stereo downmix (constant-power, rear fold) — ported formula, unit
-      tested against the reference's table of expected gains at a few
-      azimuths.
-- [ ] Ambisonic B-format out (AmbiX, order Auto/1–7).
-- [ ] FuMa↔AmbiX conversion, unit tested round-trip.
-- [ ] Binaural: spherical-head model (Brown & Duda, ported) as the fallback;
-      SOFA loading via libmysofa as the primary path (version/license check
-      logged before pinning); optional room reverb; OSC head tracking
-      (yaw/pitch/roll rotating the source field) — all fixing reference gaps
-      per §5.
+- [ ] Ambisonic B-format out (AmbiX, order Auto/1–7) wired as an actual
+      listening format in the running engine.
+- [ ] SOFA loading via libmysofa as the primary binaural path (version/
+      license check logged before pinning, same discipline as every other
+      dependency); the realtime binaural renderer itself (applying either
+      SOFA or the spherical-head coefficients above to live audio);
+      optional room reverb; OSC head tracking (yaw/pitch/roll rotating the
+      source field) — all fixing reference gaps per §5, all still open.
+- [ ] A `SpatialRenderer`-type layer in `mc_engine` that actually builds a
+      live `GainMatrix` from a `Piece`'s track positions + the venue's
+      speaker layout + the selected listening format, calling into the
+      `mc_dsp` functions above. This is the missing link between "the math
+      is tested in isolation" and "switching listening formats in the app
+      does anything" — right now it does nothing, because this doesn't
+      exist yet.
 - [ ] Seamless vs. crossfade format switching (`docs/ARCHITECTURE.md` §4.2).
 - [ ] Configurable binaural/stereo start channel (fixing reference's
       fixed-output-1 limitation per §5).
 - [ ] Top-view + elevation map UI showing speakers and the selected cue's
       tracks.
-- [ ] Full test suite from `docs/ARCHITECTURE.md` §9's spatial bullet.
+- [ ] Source-format auto-detection from filenames (deferred here from M2,
+      see that milestone's note) and the corresponding `srcFormat`/
+      `layoutIdx`/az/el/lfe fields + schema migration (v1→v2) on `Track`/
+      `Piece` — the first real exercise of the migration mechanism built
+      in M2, still pending.
 
 ## M4 — Loudness
 

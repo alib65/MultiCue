@@ -10,8 +10,9 @@ synchronized video. "MultiCue" is a working name.
 It is free software, licensed GPL-3.0-or-later.
 
 The project is pre-alpha: milestones **M0 (skeleton)**, **M1 (engine core)**
-and **M2 (playlist mode)** are substantially complete on macOS (see
-`docs/ROADMAP.md` for the exact checklist, including what is *not* yet
+and **M2 (playlist mode)** are substantially complete on macOS, and **M3
+(spatial)**'s math core exists and is tested but not yet wired into the app
+(see `docs/ROADMAP.md` for the exact checklist, including what is *not* yet
 verified -- notably Windows and Linux, which have not run at all in this
 environment, and the playlist UI, which has no automated test coverage).
 `docs/ARCHITECTURE.md` has the design.
@@ -41,6 +42,11 @@ environment, and the playlist UI, which has no automated test coverage).
 - `multicue-cli`: `list-devices`, `version`, `render` (direct-mode offline
   mix to a WAV file), `play` (live playback for manual testing, including a
   built-in pause/resume/seek sequence).
+- `mc_dsp`: spherical harmonics, VBAP, AllRAD/2D Ambisonic decoders, stereo
+  downmix, FuMa<->AmbiX conversion, layout presets, and the spherical-head
+  binaural model's filter coefficients -- all ported from the reference and
+  unit tested. Not yet wired into a live listening format in the app; see
+  M3 in `docs/ROADMAP.md`.
 
 `docs/ROADMAP.md` tracks every open item explicitly, including things that
 look done but are only manually/locally verified rather than proven in CI --
