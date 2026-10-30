@@ -22,7 +22,7 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            triplet: x64-osx
+            triplet: arm64-osx
           - os: windows-latest
             triplet: x64-windows
           - os: ubuntu-latest
@@ -37,7 +37,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpulse-dev nasm
+          sudo apt-get install -y libasound2-dev libpulse-dev nasm autoconf automake autoconf-archive libtool
 
       # vcpkg's ffmpeg port only auto-downloads nasm on Windows; macOS and
       # Linux both need it preinstalled via their system package manager.
@@ -89,6 +89,7 @@ jobs:
         with:
           version: '6.11.1'
           cache: true
+          mirror: 'https://ftp.jaist.ac.jp/pub/qtproject'
 
       - name: Configure (CMake + vcpkg manifest)
         shell: bash
@@ -119,7 +120,7 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            triplet: x64-osx
+            triplet: arm64-osx
           - os: ubuntu-latest
             triplet: x64-linux
 
@@ -132,7 +133,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpulse-dev nasm
+          sudo apt-get install -y libasound2-dev libpulse-dev nasm autoconf automake autoconf-archive libtool
 
       # vcpkg's ffmpeg port only auto-downloads nasm on Windows; macOS and
       # Linux both need it preinstalled via their system package manager.
@@ -173,6 +174,7 @@ jobs:
         with:
           version: '6.11.1'
           cache: true
+          mirror: 'https://ftp.jaist.ac.jp/pub/qtproject'
 
       - name: Configure (CMake + vcpkg manifest, sanitizers on)
         shell: bash
@@ -218,7 +220,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpulse-dev libfuse2 nasm
+          sudo apt-get install -y libasound2-dev libpulse-dev libfuse2 nasm autoconf automake autoconf-archive libtool
 
       - name: Cache vcpkg tool
         id: cache-vcpkg-tool
@@ -258,6 +260,7 @@ jobs:
         with:
           version: '6.11.1'
           cache: true
+          mirror: 'https://ftp.jaist.ac.jp/pub/qtproject'
 
       - name: Configure (CMake + vcpkg manifest, Release)
         shell: bash
