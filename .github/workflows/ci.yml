@@ -7,6 +7,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  # Pinned ourselves rather than trusting the runner image's preinstalled
+  # vcpkg: that one's shallow-clone depth and baked-in commit vary by image
+  # and repeatedly broke builtin-baseline resolution (git-show on a commit
+  # outside the shallow horizon, then a version-database gap once
+  # unshallowed). This SHA must stay >= vcpkg.json's builtin-baseline.
+  VCPKG_REF: d186940b2f0c4e8e5b4ff804af57d2a26fbfa091
+
 jobs:
   build:
     strategy:
@@ -31,6 +39,31 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libpulse-dev
 
+      - name: Cache vcpkg tool
+        id: cache-vcpkg-tool
+        uses: actions/cache@v4
+        with:
+          path: .vcpkg
+          key: vcpkg-tool-${{ runner.os }}-${{ env.VCPKG_REF }}
+
+      - name: Checkout vcpkg
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_REF }}
+          path: .vcpkg
+
+      - name: Bootstrap vcpkg (Windows)
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        shell: cmd
+        run: .vcpkg\bootstrap-vcpkg.bat
+
+      - name: Bootstrap vcpkg (Unix)
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true' && runner.os != 'Windows'
+        shell: bash
+        run: ./.vcpkg/bootstrap-vcpkg.sh
+
       # vcpkg's default binary-cache location per OS; ffmpeg alone takes
       # 20-40 min to build from source, so without this every run rebuilds
       # the whole manifest from scratch.
@@ -45,13 +78,6 @@ jobs:
       # jurplel/install-qt-action wraps aqtinstall and resolves the
       # per-OS/per-arch Qt install directory for us, exporting it as the
       # Qt6_DIR environment variable (see https://github.com/jurplel/install-qt-action).
-      # The runner's preinstalled vcpkg is a shallow clone; our manifest's
-      # builtin-baseline commit is older than its shallow horizon, so
-      # `vcpkg install` fails to `git show` it unless we unshallow first.
-      - name: Unshallow preinstalled vcpkg
-        shell: bash
-        run: git -C "$VCPKG_INSTALLATION_ROOT" fetch --unshallow origin || git -C "$VCPKG_INSTALLATION_ROOT" fetch origin
-
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -62,7 +88,7 @@ jobs:
         shell: bash
         run: |
           cmake -S . -B build \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/.vcpkg/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DQt6_DIR="$Qt6_DIR" \
             -DCMAKE_BUILD_TYPE=Debug \
@@ -102,6 +128,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libpulse-dev
 
+      - name: Cache vcpkg tool
+        id: cache-vcpkg-tool
+        uses: actions/cache@v4
+        with:
+          path: .vcpkg
+          key: vcpkg-tool-${{ runner.os }}-${{ env.VCPKG_REF }}
+
+      - name: Checkout vcpkg
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_REF }}
+          path: .vcpkg
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true'
+        shell: bash
+        run: ./.vcpkg/bootstrap-vcpkg.sh
+
       - name: Cache vcpkg binary cache
         uses: actions/cache@v4
         with:
@@ -109,13 +155,6 @@ jobs:
             ~/.cache/vcpkg/archives
             ~/AppData/Local/vcpkg/archives
           key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
-
-      # The runner's preinstalled vcpkg is a shallow clone; our manifest's
-      # builtin-baseline commit is older than its shallow horizon, so
-      # `vcpkg install` fails to `git show` it unless we unshallow first.
-      - name: Unshallow preinstalled vcpkg
-        shell: bash
-        run: git -C "$VCPKG_INSTALLATION_ROOT" fetch --unshallow origin || git -C "$VCPKG_INSTALLATION_ROOT" fetch origin
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -127,7 +166,7 @@ jobs:
         shell: bash
         run: |
           cmake -S . -B build \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/.vcpkg/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DQt6_DIR="$Qt6_DIR" \
             -DCMAKE_BUILD_TYPE=Debug \
@@ -169,6 +208,31 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libpulse-dev libfuse2
 
+      - name: Cache vcpkg tool
+        id: cache-vcpkg-tool
+        uses: actions/cache@v4
+        with:
+          path: .vcpkg
+          key: vcpkg-tool-${{ runner.os }}-${{ env.VCPKG_REF }}
+
+      - name: Checkout vcpkg
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_REF }}
+          path: .vcpkg
+
+      - name: Bootstrap vcpkg (Windows)
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        shell: cmd
+        run: .vcpkg\bootstrap-vcpkg.bat
+
+      - name: Bootstrap vcpkg (Unix)
+        if: steps.cache-vcpkg-tool.outputs.cache-hit != 'true' && runner.os != 'Windows'
+        shell: bash
+        run: ./.vcpkg/bootstrap-vcpkg.sh
+
       - name: Cache vcpkg binary cache
         uses: actions/cache@v4
         with:
@@ -176,13 +240,6 @@ jobs:
             ~/.cache/vcpkg/archives
             ~/AppData/Local/vcpkg/archives
           key: vcpkg-${{ runner.os }}-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
-
-      # The runner's preinstalled vcpkg is a shallow clone; our manifest's
-      # builtin-baseline commit is older than its shallow horizon, so
-      # `vcpkg install` fails to `git show` it unless we unshallow first.
-      - name: Unshallow preinstalled vcpkg
-        shell: bash
-        run: git -C "$VCPKG_INSTALLATION_ROOT" fetch --unshallow origin || git -C "$VCPKG_INSTALLATION_ROOT" fetch origin
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -194,7 +251,7 @@ jobs:
         shell: bash
         run: |
           cmake -S . -B build \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_TOOLCHAIN_FILE="$GITHUB_WORKSPACE/.vcpkg/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
             -DQt6_DIR="$Qt6_DIR" \
             -DCMAKE_BUILD_TYPE=Release \
