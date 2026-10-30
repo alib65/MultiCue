@@ -37,7 +37,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpulse-dev
+          sudo apt-get install -y libasound2-dev libpulse-dev nasm
+
+      # vcpkg's ffmpeg port only auto-downloads nasm on Windows; macOS and
+      # Linux both need it preinstalled via their system package manager.
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install nasm
 
       - name: Cache vcpkg tool
         id: cache-vcpkg-tool
@@ -81,7 +87,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.11.3'
+          version: '6.11.1'
           cache: true
 
       - name: Configure (CMake + vcpkg manifest)
@@ -126,7 +132,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpulse-dev
+          sudo apt-get install -y libasound2-dev libpulse-dev nasm
+
+      # vcpkg's ffmpeg port only auto-downloads nasm on Windows; macOS and
+      # Linux both need it preinstalled via their system package manager.
+      - name: Install macOS build tools
+        if: runner.os == 'macOS'
+        run: brew install nasm
 
       - name: Cache vcpkg tool
         id: cache-vcpkg-tool
@@ -159,7 +171,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.11.3'
+          version: '6.11.1'
           cache: true
 
       - name: Configure (CMake + vcpkg manifest, sanitizers on)
@@ -206,7 +218,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpulse-dev libfuse2
+          sudo apt-get install -y libasound2-dev libpulse-dev libfuse2 nasm
 
       - name: Cache vcpkg tool
         id: cache-vcpkg-tool
@@ -244,7 +256,7 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.11.3'
+          version: '6.11.1'
           cache: true
 
       - name: Configure (CMake + vcpkg manifest, Release)
